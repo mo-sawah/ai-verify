@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '1.0.1');
+define('AI_VERIFY_VERSION', '1.0.2');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -36,6 +36,21 @@ class AI_Verify {
     }
     
     private function init() {
+        // Check if required files exist
+        if (!file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/settings.php')) {
+            add_action('admin_notices', function() {
+                echo '<div class="error"><p>AI Verify Error: Missing includes/settings.php file</p></div>';
+            });
+            return;
+        }
+        
+        if (!file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/ajax-handlers.php')) {
+            add_action('admin_notices', function() {
+                echo '<div class="error"><p>AI Verify Error: Missing includes/ajax-handlers.php file</p></div>';
+            });
+            return;
+        }
+        
         // Load required files
         require_once AI_VERIFY_PLUGIN_DIR . 'includes/settings.php';
         require_once AI_VERIFY_PLUGIN_DIR . 'includes/ajax-handlers.php';
@@ -51,14 +66,19 @@ class AI_Verify {
         add_filter('the_content', array($this, 'auto_add_to_content'));
         
         // Initialize settings
-        AI_Verify_Settings::init();
+        if (class_exists('AI_Verify_Settings')) {
+            AI_Verify_Settings::init();
+        }
         
         // Initialize AJAX handlers
-        AI_Verify_Ajax::init();
+        if (class_exists('AI_Verify_Ajax')) {
+            AI_Verify_Ajax::init();
+        }
     }
     
     public function enqueue_assets() {
-        if (!is_singular('post') && !has_shortcode(get_the_content(), 'ai_verify')) {
+        // Only load on singular posts
+        if (!is_singular('post')) {
             return;
         }
         
@@ -98,6 +118,11 @@ class AI_Verify {
     }
     
     public function render_verification_tools($atts = array()) {
+        // Prevent rendering during content filtering
+        if (doing_filter('get_the_excerpt')) {
+            return '';
+        }
+        
         $atts = shortcode_atts(array(
             'show_image_search' => 'yes',
             'show_ai_chat' => 'yes',
@@ -107,22 +132,39 @@ class AI_Verify {
         
         $featured_image_url = get_the_post_thumbnail_url(get_the_ID(), 'full');
         $post_title = get_the_title();
-        $post_excerpt = get_the_excerpt();
+        $post_excerpt = '';
+        
+        $template_path = AI_VERIFY_PLUGIN_DIR . 'templates/verification-tools.php';
+        
+        if (!file_exists($template_path)) {
+            return '<!-- AI Verify: Template file not found -->';
+        }
         
         ob_start();
-        include AI_VERIFY_PLUGIN_DIR . 'templates/verification-tools.php';
-        return ob_get_clean();
+        include $template_path;
+        $output = ob_get_clean();
+        
+        return $output;
     }
     
     public function auto_add_to_content($content) {
-        if (!is_singular('post')) {
+        // Prevent infinite loops
+        static $is_processing = false;
+        
+        if ($is_processing) {
+            return $content;
+        }
+        
+        if (!is_singular('post') || !is_main_query() || !in_the_loop()) {
             return $content;
         }
         
         $auto_add = get_option('ai_verify_auto_add', 'no');
         
-        if ($auto_add === 'yes' && !has_shortcode($content, 'ai_verify')) {
+        if ($auto_add === 'yes' && strpos($content, 'ai-verify-tools') === false) {
+            $is_processing = true;
             $content .= $this->render_verification_tools();
+            $is_processing = false;
         }
         
         return $content;
