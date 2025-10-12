@@ -397,9 +397,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
+  padding: 5px 0;
   font-size: 15px;
   color: #4b5563;
+  margin-bottom: 0px;
 }
 
 .s-dark .plan-features li {
@@ -413,7 +414,7 @@
 
 .plan-select-btn {
   width: 100%;
-  padding: 16px;
+  padding: 5px 0px;
   background: white;
   border: 2px solid #acd2bf;
   color: #acd2bf;
@@ -535,7 +536,7 @@
 
 .submit-btn {
   width: 100%;
-  padding: 18px 24px;
+  padding: 10px 0px;
   background: linear-gradient(135deg, #acd2bf 0%, #8fc4a8 100%);
   color: white;
   border: none;
@@ -1145,7 +1146,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  max-width: 600px;
+  max-width: 700px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;

@@ -9,6 +9,7 @@
 
 (function ($) {
   "use strict";
+  let currentReportId = null;
 
   // Cookie Management
   const FactcheckCookies = {
@@ -393,7 +394,6 @@
   "use strict";
 
   let currentInputType = "auto";
-  let currentReportId = null;
 
   $(document).ready(function () {
     initSearchInterface();
