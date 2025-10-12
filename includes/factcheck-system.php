@@ -34,7 +34,7 @@ class AI_Verify_Factcheck_System {
     public static function enqueue_assets() {
         // Only load on pages with our shortcodes
         global $post;
-        if (!is_a($post, 'WP_Post') || !has_shortcode($post->post_content, 'ai_factcheck_search') && !has_shortcode($post->post_content, 'ai_factcheck_results')) {
+        if ( !is_a($post, 'WP_Post') || ( !has_shortcode($post->post_content, 'ai_factcheck_search') && !has_shortcode($post->post_content, 'ai_factcheck_results') && !has_shortcode($post->post_content, 'ai_factcheck_header_search') ) ) {
             return;
         }
         
