@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 1.0.4
+ * Version: 1.2.0
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '1.0.4');
+define('AI_VERIFY_VERSION', '1.2.0');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -54,6 +54,14 @@ class AI_Verify {
         // Load required files
         require_once AI_VERIFY_PLUGIN_DIR . 'includes/settings.php';
         require_once AI_VERIFY_PLUGIN_DIR . 'includes/ajax-handlers.php';
+        
+        // Load widget files
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/misinfo-widget.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/misinfo-widget.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/misinfo-ajax.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/misinfo-ajax.php';
+        }
         
         // Register hooks
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
