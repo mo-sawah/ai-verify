@@ -23,7 +23,7 @@ $cta_btn_3_url = get_option('ai_verify_cta_button_3_url', 'https://disinformatio
 ?>
 
 <div class="ai-verify-tools">
-    <h2 class="ai-verify-title">🔍 Verify This Yourself</h2>
+    <h2 class="ai-verify-title">Verify This Yourself</h2>
     <p class="ai-verify-subtitle">Use these professional tools to fact-check and investigate claims independently</p>
 
     <?php if ($atts['show_image_search'] === 'yes'): ?>
