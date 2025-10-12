@@ -48,9 +48,4 @@ if (!defined('ABSPATH')) {
         </button>
     </div>
     
-    <div class="factcheck-examples-header">
-        <span class="examples-label">Examples:</span>
-        <button class="example-btn-header" data-example="https://www.reuters.com/world/europe/ukraine-war-latest-news-2023-03-14/">Article URL</button>
-        <button class="example-btn-header" data-example="Is climate change a hoax?">A Claim</button>
-    </div>
 </div>
