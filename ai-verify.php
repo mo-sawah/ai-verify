@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 1.2.1
+ * Version: 1.0.0
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '1.2.1');
+define('AI_VERIFY_VERSION', '1.0.0');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -85,7 +85,10 @@ class AI_Verify {
     }
     
     public function enqueue_assets() {
-        // Only load on singular posts
+        // ALWAYS enqueue widget assets (for widgets/shortcodes on any page)
+        $this->enqueue_widget_assets();
+        
+        // Only load verification tools CSS/JS on singular posts
         if (!is_singular('post')) {
             return;
         }
@@ -110,9 +113,6 @@ class AI_Verify {
             'nonce' => wp_create_nonce('ai_verify_nonce'),
             'post_id' => get_the_ID()
         ));
-        
-        // Enqueue widget assets globally (for widgets/shortcodes)
-        $this->enqueue_widget_assets();
     }
     
     public function enqueue_widget_assets() {
