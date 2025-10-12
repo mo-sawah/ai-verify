@@ -39,6 +39,9 @@ class AI_Verify_Settings {
         register_setting('ai_verify_settings', 'ai_verify_cta_button_2_url');
         register_setting('ai_verify_settings', 'ai_verify_cta_button_3_text');
         register_setting('ai_verify_settings', 'ai_verify_cta_button_3_url');
+        
+        // Fact-Check System Settings
+        register_setting('ai_verify_settings', 'ai_verify_results_page_url');
     }
     
     public static function render_settings_page() {

@@ -1,0 +1,209 @@
+<?php
+/**
+ * Fact-Check Results Page Template
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+?>
+
+<div class="factcheck-results-wrapper" id="factcheckResults">
+    <!-- Loading State -->
+    <div class="factcheck-loading" id="factcheckLoading">
+        <div class="loading-spinner">
+            <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" opacity="0.3"></path>
+                <path d="M12 2v4c3.31 0 6 2.69 6 6h4c0-5.52-4.48-10-10-10z"></path>
+            </svg>
+        </div>
+        <h3>Analyzing Content...</h3>
+        <p class="loading-step" id="loadingStep">Initializing...</p>
+        <div class="loading-progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+    </div>
+    
+    <!-- Email Gate Modal -->
+    <div class="factcheck-email-gate" id="factcheckEmailGate">
+        <div class="email-gate-content">
+            <div class="email-gate-header">
+                <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg>
+                <h2>Analysis Complete!</h2>
+                <p>Get your comprehensive fact-check report by entering your email</p>
+            </div>
+            
+            <form id="emailGateForm" class="email-gate-form">
+                <div class="form-group">
+                    <label for="userEmail">Email Address</label>
+                    <input type="email" id="userEmail" required placeholder="your@email.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="userName">Full Name</label>
+                    <input type="text" id="userName" required placeholder="John Doe">
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="termsAccept" required>
+                        <span>I accept the <a href="#" target="_blank">Terms of Use</a> and <a href="#" target="_blank">Privacy Policy</a></span>
+                    </label>
+                </div>
+                
+                <button type="submit" class="email-gate-submit">
+                    <span>View My Report</span>
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                </button>
+                
+                <p class="email-gate-note">🔒 Your information is secure and never shared</p>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Results Display -->
+    <div class="factcheck-report" id="factcheckReport" style="display: none;">
+        <!-- Report Header -->
+        <div class="report-header">
+            <div class="report-meta">
+                <span class="report-id">Report ID: <strong id="reportId">-</strong></span>
+                <span class="report-date">Generated: <strong id="reportDate">-</strong></span>
+            </div>
+            
+            <?php if ($atts['show_export'] === 'yes'): ?>
+            <div class="report-actions">
+                <button class="export-btn" data-format="html">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                    </svg>
+                    Export HTML
+                </button>
+                <button class="export-btn" data-format="json">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    Export JSON
+                </button>
+                <button class="share-btn">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                    </svg>
+                    Share
+                </button>
+            </div>
+            <?php endif; ?>
+        </div>
+        
+        <!-- Overall Score Card -->
+        <div class="report-score-card">
+            <div class="score-visual">
+                <div class="score-circle">
+                    <svg class="score-ring" width="200" height="200">
+                        <circle cx="100" cy="100" r="90" stroke="#e5e5e5" stroke-width="12" fill="none"></circle>
+                        <circle id="scoreCircle" cx="100" cy="100" r="90" stroke="#acd2bf" stroke-width="12" fill="none" stroke-linecap="round" transform="rotate(-90 100 100)"></circle>
+                    </svg>
+                    <div class="score-number">
+                        <span id="overallScore">0</span>
+                        <span class="score-label">Credibility Score</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="score-details">
+                <h2 id="credibilityRating">Analyzing...</h2>
+                <p id="inputValue" class="analyzed-content"></p>
+                
+                <div class="score-breakdown">
+                    <div class="breakdown-item">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Claims Verified: <strong id="claimsCount">0</strong></span>
+                    </div>
+                    <div class="breakdown-item">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                        </svg>
+                        <span>Sources Checked: <strong id="sourcesCount">0</strong></span>
+                    </div>
+                    <div class="breakdown-item">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Analysis Time: <strong id="analysisTime">-</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Claims Analysis -->
+        <div class="report-section">
+            <h3 class="section-title">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                </svg>
+                Detailed Claims Analysis
+            </h3>
+            <div id="claimsAnalysis" class="claims-list">
+                <!-- Claims will be inserted here -->
+            </div>
+        </div>
+        
+        <!-- Sources -->
+        <div class="report-section">
+            <h3 class="section-title">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                </svg>
+                Sources Consulted
+            </h3>
+            <div id="sourcesList" class="sources-list">
+                <!-- Sources will be inserted here -->
+            </div>
+        </div>
+        
+        <!-- Methodology -->
+        <div class="report-section methodology">
+            <h3 class="section-title">
+                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Our Methodology
+            </h3>
+            <div class="methodology-steps">
+                <div class="method-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Content Extraction</h4>
+                        <p>We scrape and parse the content using advanced web crawling technology</p>
+                    </div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Claim Identification</h4>
+                        <p>AI algorithms identify factual claims worthy of verification</p>
+                    </div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Multi-Source Verification</h4>
+                        <p>Claims are cross-referenced against multiple authoritative sources</p>
+                    </div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>AI Analysis</h4>
+                        <p>Advanced AI models provide context-aware fact-checking</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

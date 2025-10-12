@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 1.0.1
+ * Version: 1.1.0
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '1.0.1');
+define('AI_VERIFY_VERSION', '1.1.0');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -63,6 +63,28 @@ class AI_Verify {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/misinfo-ajax.php';
         }
         
+        // Load fact-check system files
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-database.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-database.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-scraper.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-scraper.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-analyzer.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-analyzer.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-ajax.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-ajax.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-system.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-system.php';
+        }
+        
+        // Load leads admin (only in admin)
+        if (is_admin() && file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-leads-admin.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-leads-admin.php';
+        }
+        
         // Register hooks
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
@@ -81,6 +103,11 @@ class AI_Verify {
         // Initialize AJAX handlers
         if (class_exists('AI_Verify_Ajax')) {
             AI_Verify_Ajax::init();
+        }
+        
+        // Initialize fact-check system
+        if (class_exists('AI_Verify_Factcheck_System')) {
+            AI_Verify_Factcheck_System::init();
         }
     }
     
