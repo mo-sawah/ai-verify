@@ -24,46 +24,9 @@ if (!defined('ABSPATH')) {
         </div>
     </div>
     
-    <!-- Email Gate Modal -->
-    <div class="factcheck-email-gate" id="factcheckEmailGate">
-        <div class="email-gate-content">
-            <div class="email-gate-header">
-                <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                </svg>
-                <h2>Analysis Complete!</h2>
-                <p>Get your comprehensive fact-check report by entering your email</p>
-            </div>
-            
-            <form id="emailGateForm" class="email-gate-form">
-                <div class="form-group">
-                    <label for="userEmail">Email Address</label>
-                    <input type="email" id="userEmail" required placeholder="your@email.com">
-                </div>
-                
-                <div class="form-group">
-                    <label for="userName">Full Name</label>
-                    <input type="text" id="userName" required placeholder="John Doe">
-                </div>
-                
-                <div class="form-group checkbox-group">
-                    <label>
-                        <input type="checkbox" id="termsAccept" required>
-                        <span>I accept the <a href="#" target="_blank">Terms of Use</a> and <a href="#" target="_blank">Privacy Policy</a></span>
-                    </label>
-                </div>
-                
-                <button type="submit" class="email-gate-submit">
-                    <span>View My Report</span>
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                    </svg>
-                </button>
-                
-                <p class="email-gate-note">🔒 Your information is secure and never shared</p>
-            </form>
-        </div>
-    </div>
+    <?php
+        include AI_VERIFY_PLUGIN_DIR . 'templates/factcheck-email-gate.php';
+    ?>
     
     <!-- Results Display -->
     <div class="factcheck-report" id="factcheckReport" style="display: none;">

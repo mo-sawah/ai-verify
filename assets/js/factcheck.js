@@ -555,14 +555,13 @@
 
     // Start processing flow
     setTimeout(function () {
-      showEmailGate();
-    }, 2000);
+      // --- THIS IS THE ONLY CHANGE HERE ---
+      // Instead of the old showEmailGate(), just fade in the new one by its ID
+      $("#factcheckEmailGate").fadeIn(300);
 
-    // Email form submission
-    $("#emailGateForm").on("submit", function (e) {
-      e.preventDefault();
-      submitEmail();
-    });
+      // The new SubscriptionManager will handle everything else
+      $("#factcheckLoading").fadeOut(300);
+    }, 2000);
 
     // Export buttons
     $(".export-btn").on("click", function () {
@@ -572,60 +571,6 @@
     // Share button
     $(".share-btn").on("click", function () {
       shareReport();
-    });
-  }
-
-  /**
-   * Show email gate modal
-   */
-  function showEmailGate() {
-    $("#factcheckLoading").fadeOut(300, function () {
-      $("#factcheckEmailGate").fadeIn(300);
-    });
-  }
-
-  /**
-   * Submit email and process
-   */
-  function submitEmail() {
-    const email = $("#userEmail").val().trim();
-    const name = $("#userName").val().trim();
-    const terms = $("#termsAccept").is(":checked");
-
-    if (!email || !name || !terms) {
-      alert("Please fill all fields and accept the terms");
-      return;
-    }
-
-    // Disable form
-    $("#emailGateForm button").prop("disabled", true);
-
-    $.ajax({
-      url: aiVerifyFactcheck.ajax_url,
-      type: "POST",
-      data: {
-        action: "ai_verify_submit_email",
-        nonce: aiVerifyFactcheck.nonce,
-        report_id: currentReportId,
-        email: email,
-        name: name,
-        terms_accepted: terms,
-      },
-      success: function (response) {
-        if (response.success) {
-          $("#factcheckEmailGate").fadeOut(300, function () {
-            $("#factcheckLoading").fadeIn(300);
-            startProcessing();
-          });
-        } else {
-          alert(response.data.message || "Failed to submit");
-          $("#emailGateForm button").prop("disabled", false);
-        }
-      },
-      error: function () {
-        alert("Connection error");
-        $("#emailGateForm button").prop("disabled", false);
-      },
     });
   }
 
