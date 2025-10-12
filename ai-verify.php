@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 1.2.0
+ * Version: 1.2.1
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '1.2.0');
+define('AI_VERIFY_VERSION', '1.2.1');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -110,6 +110,45 @@ class AI_Verify {
             'nonce' => wp_create_nonce('ai_verify_nonce'),
             'post_id' => get_the_ID()
         ));
+        
+        // Enqueue widget assets globally (for widgets/shortcodes)
+        $this->enqueue_widget_assets();
+    }
+    
+    public function enqueue_widget_assets() {
+        static $enqueued = false;
+        
+        if ($enqueued) {
+            return;
+        }
+        
+        // Enqueue widget CSS
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/css/misinfo-widget.css')) {
+            wp_enqueue_style(
+                'ai-verify-misinfo-widget',
+                AI_VERIFY_PLUGIN_URL . 'assets/css/misinfo-widget.css',
+                array(),
+                AI_VERIFY_VERSION
+            );
+        }
+        
+        // Enqueue widget JS
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/js/misinfo-widget.js')) {
+            wp_enqueue_script(
+                'ai-verify-misinfo-widget',
+                AI_VERIFY_PLUGIN_URL . 'assets/js/misinfo-widget.js',
+                array('jquery'),
+                AI_VERIFY_VERSION,
+                true
+            );
+            
+            wp_localize_script('ai-verify-misinfo-widget', 'aiVerifyMisinfo', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('ai_verify_misinfo_nonce')
+            ));
+        }
+        
+        $enqueued = true;
     }
     
     public function enqueue_admin_assets($hook) {
