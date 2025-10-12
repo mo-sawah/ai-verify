@@ -13,6 +13,7 @@ class AI_Verify_Factcheck_System {
         // Register shortcodes
         add_shortcode('ai_factcheck_search', array(__CLASS__, 'render_search'));
         add_shortcode('ai_factcheck_results', array(__CLASS__, 'render_results'));
+        add_shortcode('ai_factcheck_header_search', array(__CLASS__, 'render_header_search'));
         
         // Enqueue assets
         add_action('wp_enqueue_scripts', array(__CLASS__, 'enqueue_assets'));
@@ -76,6 +77,16 @@ class AI_Verify_Factcheck_System {
         
         ob_start();
         include AI_VERIFY_PLUGIN_DIR . 'templates/factcheck-search.php';
+        return ob_get_clean();
+    }
+
+    /**
+     * Render header search interface
+     */
+    public static function render_header_search($atts = array()) {
+        ob_start();
+        // Assuming you have a template file for the header search
+        include AI_VERIFY_PLUGIN_DIR . 'templates/factcheck-header-search.php';
         return ob_get_clean();
     }
     
