@@ -1,6 +1,6 @@
 <?php
 /**
- * Email Gate Template - Lead Capture Form
+ * Email Gate Template - Subscription Plans
  */
 
 if (!defined('ABSPATH')) {
@@ -25,57 +25,122 @@ if (!defined('ABSPATH')) {
                     </svg>
                 </div>
                 <h2>Analysis Complete! 🎉</h2>
-                <p>Get your comprehensive fact-check report with detailed analysis, sources, and credibility score</p>
+                <p>Choose your plan to view the comprehensive fact-check report</p>
             </div>
             
-            <div class="email-gate-features">
-                <div class="feature">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span>Detailed Credibility Score</span>
-                </div>
-                <div class="feature">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                    </svg>
-                    <span>Claim-by-Claim Analysis</span>
-                </div>
-                <div class="feature">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                    </svg>
-                    <span>Verified Sources</span>
-                </div>
-                <div class="feature">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-                    </svg>
-                    <span>Downloadable Report</span>
-                </div>
-            </div>
-            
-            <form id="emailGateForm" class="email-gate-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="userName">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                            </svg>
-                            Full Name
-                        </label>
-                        <input type="text" id="userName" name="user_name" required placeholder="John Doe" autocomplete="name">
+            <div class="subscription-plans">
+                <!-- Free Plan -->
+                <div class="plan-card free-plan active" data-plan="free">
+                    <div class="plan-badge">Limited Time</div>
+                    <div class="plan-header">
+                        <h3>Free Access</h3>
+                        <div class="plan-price">
+                            <span class="price">$0</span>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="userEmail">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    <ul class="plan-features">
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
-                            Email Address
-                        </label>
-                        <input type="email" id="userEmail" name="user_email" required placeholder="john@example.com" autocomplete="email">
+                            5 Fact-Checks per Month
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Basic Analysis
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Source Citations
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            30 Days Access
+                        </li>
+                    </ul>
+                    
+                    <button type="button" class="plan-select-btn" data-plan="free">
+                        Get Free Access
+                    </button>
+                </div>
+                
+                <!-- Paid Plan -->
+                <div class="plan-card pro-plan" data-plan="pro">
+                    <div class="plan-badge recommended">Recommended</div>
+                    <div class="plan-header">
+                        <h3>Pro Access</h3>
+                        <div class="plan-price">
+                            <span class="price">$5</span>
+                            <span class="period">/month</span>
+                        </div>
                     </div>
+                    
+                    <ul class="plan-features">
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Unlimited Fact-Checks
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Advanced AI Analysis
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Priority Processing
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Export Reports (PDF/CSV)
+                        </li>
+                        <li>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Email Support
+                        </li>
+                    </ul>
+                    
+                    <button type="button" class="plan-select-btn" data-plan="pro">
+                        Subscribe Now
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Free Plan Form -->
+            <form id="freePlanForm" class="plan-form active">
+                <div class="form-group">
+                    <label for="userName">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        </svg>
+                        Full Name
+                    </label>
+                    <input type="text" id="userName" name="user_name" required placeholder="John Doe" autocomplete="name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="userEmail">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Email Address
+                    </label>
+                    <input type="email" id="userEmail" name="user_email" required placeholder="john@example.com" autocomplete="email">
                 </div>
                 
                 <div class="form-group checkbox-group">
@@ -90,8 +155,8 @@ if (!defined('ABSPATH')) {
                     </label>
                 </div>
                 
-                <button type="submit" class="email-gate-submit" id="emailGateSubmit">
-                    <span class="btn-text">View My Fact-Check Report</span>
+                <button type="submit" class="submit-btn" id="freePlanSubmit">
+                    <span class="btn-text">View My Report - Free</span>
                     <svg class="btn-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
                     </svg>
@@ -101,16 +166,72 @@ if (!defined('ABSPATH')) {
                     </svg>
                 </button>
                 
+                <p class="usage-note">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span id="usageCounter">5 fact-checks remaining this month</span>
+                </p>
+            </form>
+            
+            <!-- Pro Plan Form (Stripe Payment) -->
+            <form id="proPlanForm" class="plan-form" style="display: none;">
+                <div class="stripe-payment-demo">
+                    <div class="payment-header">
+                        <h4>💳 Secure Payment</h4>
+                        <p>Powered by Stripe - Your payment is 100% secure</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cardName">Cardholder Name</label>
+                        <input type="text" id="cardName" placeholder="John Doe" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cardNumber">Card Number</label>
+                        <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456" maxlength="19" required>
+                    </div>
+                    
+                    <div class="form-row-2">
+                        <div class="form-group">
+                            <label for="cardExpiry">Expiry Date</label>
+                            <input type="text" id="cardExpiry" placeholder="MM / YY" maxlength="7" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="cardCvc">CVC</label>
+                            <input type="text" id="cardCvc" placeholder="123" maxlength="3" required>
+                        </div>
+                    </div>
+                    
+                    <div class="payment-summary">
+                        <div class="summary-row">
+                            <span>Pro Subscription</span>
+                            <span>$5.00</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span>Total Due Today</span>
+                            <span>$5.00</span>
+                        </div>
+                        <p class="billing-note">Billed monthly. Cancel anytime.</p>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn pro-submit" id="proPlanSubmit">
+                        <span class="btn-text">Subscribe & View Report</span>
+                        <svg class="btn-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                    </button>
+                </div>
+                
                 <p class="email-gate-note">
                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
                     </svg>
-                    Your information is secure and will never be shared with third parties
+                    Secure checkout powered by Stripe. Your payment information is never stored.
                 </p>
             </form>
             
             <div class="email-gate-trust">
-                <p>Trusted by thousands of fact-checkers worldwide</p>
                 <div class="trust-badges">
                     <span class="badge">🔒 SSL Secured</span>
                     <span class="badge">✓ GDPR Compliant</span>

@@ -2,6 +2,393 @@
  * Fact-Check System JavaScript
  */
 
+/**
+ * Cookie-Based Usage Tracking & Subscription System
+ * ADD THIS CODE TO THE BEGINNING OF factcheck.js
+ */
+
+(function ($) {
+  "use strict";
+
+  // Cookie Management
+  const FactcheckCookies = {
+    // Set cookie
+    set: function (name, value, days) {
+      const d = new Date();
+      d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+      const expires = "expires=" + d.toUTCString();
+      document.cookie = name + "=" + value + ";" + expires + ";path=/";
+    },
+
+    // Get cookie
+    get: function (name) {
+      const nameEQ = name + "=";
+      const ca = document.cookie.split(";");
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) == " ") c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+      }
+      return null;
+    },
+
+    // Delete cookie
+    delete: function (name) {
+      document.cookie =
+        name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    },
+  };
+
+  // Usage Tracking System
+  const UsageTracker = {
+    cookieName: "ai_verify_usage",
+    maxFreeUses: 5,
+
+    // Get current usage data
+    getUsage: function () {
+      const data = FactcheckCookies.get(this.cookieName);
+      if (!data) {
+        return { count: 0, expires: null };
+      }
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        return { count: 0, expires: null };
+      }
+    },
+
+    // Initialize usage tracking (30 days)
+    init: function () {
+      const usage = this.getUsage();
+      if (!usage.expires || new Date() > new Date(usage.expires)) {
+        // Reset for new month
+        const expires = new Date();
+        expires.setDate(expires.getDate() + 30);
+        const newUsage = {
+          count: 0,
+          expires: expires.toISOString(),
+        };
+        FactcheckCookies.set(this.cookieName, JSON.stringify(newUsage), 30);
+        return newUsage;
+      }
+      return usage;
+    },
+
+    // Check if user has uses remaining
+    hasUsesRemaining: function () {
+      const usage = this.getUsage();
+      return usage.count < this.maxFreeUses;
+    },
+
+    // Get remaining uses
+    getRemainingUses: function () {
+      const usage = this.getUsage();
+      return Math.max(0, this.maxFreeUses - usage.count);
+    },
+
+    // Increment usage counter
+    incrementUsage: function () {
+      const usage = this.getUsage();
+      usage.count = (usage.count || 0) + 1;
+
+      if (!usage.expires) {
+        const expires = new Date();
+        expires.setDate(expires.getDate() + 30);
+        usage.expires = expires.toISOString();
+      }
+
+      FactcheckCookies.set(this.cookieName, JSON.stringify(usage), 30);
+      return usage.count;
+    },
+
+    // Update counter display
+    updateCounter: function () {
+      const remaining = this.getRemainingUses();
+      const $counter = $("#usageCounter");
+      if ($counter.length) {
+        if (remaining > 0) {
+          $counter.html(
+            `${remaining} fact-check${
+              remaining !== 1 ? "s" : ""
+            } remaining this month`
+          );
+        } else {
+          $counter.html(
+            'No free uses remaining. <a href="#" class="upgrade-link">Upgrade to Pro</a>'
+          );
+        }
+      }
+    },
+  };
+
+  // Subscription System
+  const SubscriptionManager = {
+    selectedPlan: "free",
+
+    init: function () {
+      // Plan selection
+      $(".plan-card").on("click", function () {
+        const plan = $(this).data("plan");
+        SubscriptionManager.selectPlan(plan);
+      });
+
+      $(".plan-select-btn").on("click", function (e) {
+        e.stopPropagation();
+        const plan = $(this).data("plan");
+        SubscriptionManager.selectPlan(plan);
+      });
+
+      // Form submissions
+      $("#freePlanForm").on("submit", function (e) {
+        e.preventDefault();
+        SubscriptionManager.submitFreePlan();
+      });
+
+      $("#proPlanForm").on("submit", function (e) {
+        e.preventDefault();
+        SubscriptionManager.submitProPlan();
+      });
+
+      // Initialize usage counter
+      UsageTracker.init();
+      UsageTracker.updateCounter();
+    },
+
+    selectPlan: function (plan) {
+      this.selectedPlan = plan;
+
+      // Update UI
+      $(".plan-card").removeClass("active");
+      $(`.plan-card[data-plan="${plan}"]`).addClass("active");
+
+      // Show appropriate form
+      $(".plan-form").removeClass("active").hide();
+      if (plan === "free") {
+        $("#freePlanForm").addClass("active").fadeIn(300);
+      } else {
+        $("#proPlanForm").addClass("active").fadeIn(300);
+      }
+    },
+
+    submitFreePlan: function () {
+      // Check usage limit
+      if (!UsageTracker.hasUsesRemaining()) {
+        alert(
+          "You have reached your free limit for this month. Please upgrade to Pro for unlimited access."
+        );
+        this.selectPlan("pro");
+        return;
+      }
+
+      const email = $("#userEmail").val().trim();
+      const name = $("#userName").val().trim();
+      const terms = $("#termsAccept").is(":checked");
+
+      if (!email || !name || !terms) {
+        alert("Please fill all fields and accept the terms");
+        return;
+      }
+
+      // Disable button
+      $("#freePlanSubmit").prop("disabled", true).addClass("loading");
+      $(".btn-text").hide();
+      $(".btn-loading").show();
+
+      // Increment usage
+      UsageTracker.incrementUsage();
+
+      // Submit via AJAX (same as before)
+      $.ajax({
+        url: aiVerifyFactcheck.ajax_url,
+        type: "POST",
+        data: {
+          action: "ai_verify_submit_email",
+          nonce: aiVerifyFactcheck.nonce,
+          report_id: currentReportId,
+          email: email,
+          name: name,
+          terms_accepted: terms,
+          plan: "free",
+        },
+        success: function (response) {
+          if (response.success) {
+            $("#factcheckEmailGate").fadeOut(300, function () {
+              $("#factcheckLoading").fadeIn(300);
+              startProcessing();
+            });
+          } else {
+            alert(response.data.message || "Failed to submit");
+            $("#freePlanSubmit").prop("disabled", false).removeClass("loading");
+            $(".btn-text").show();
+            $(".btn-loading").hide();
+          }
+        },
+        error: function () {
+          alert("Connection error");
+          $("#freePlanSubmit").prop("disabled", false).removeClass("loading");
+          $(".btn-text").show();
+          $(".btn-loading").hide();
+        },
+      });
+    },
+
+    submitProPlan: function () {
+      // For now, just show a demo message
+      // In production, integrate with Stripe
+      alert(
+        "Stripe integration will be implemented here.\n\nThis will process the payment and grant unlimited access."
+      );
+
+      // TODO: Integrate Stripe payment
+      // After successful payment:
+      // 1. Set pro cookie
+      // 2. Submit email to backend
+      // 3. Show results
+
+      // Demo: Just proceed for now
+      const cardName = $("#cardName").val().trim();
+      const cardNumber = $("#cardNumber").val().trim();
+      const cardExpiry = $("#cardExpiry").val().trim();
+      const cardCvc = $("#cardCvc").val().trim();
+
+      if (!cardName || !cardNumber || !cardExpiry || !cardCvc) {
+        alert("Please fill all payment fields");
+        return;
+      }
+
+      // Set pro subscription cookie (30 days for demo)
+      FactcheckCookies.set("ai_verify_pro", "true", 30);
+
+      // Close modal and show results
+      $("#factcheckEmailGate").fadeOut(300, function () {
+        $("#factcheckLoading").fadeIn(300);
+        startProcessing();
+      });
+    },
+  };
+
+  // Header Search Functionality
+  const HeaderSearch = {
+    currentInputType: "auto",
+
+    init: function () {
+      if ($(".factcheck-header-search").length === 0) {
+        return;
+      }
+
+      // Filter buttons
+      $(".filter-btn-mini").on("click", function () {
+        $(".filter-btn-mini").removeClass("active");
+        $(this).addClass("active");
+        HeaderSearch.currentInputType = $(this).data("type");
+      });
+
+      // Example buttons
+      $(".example-btn-header").on("click", function () {
+        const example = $(this).data("example");
+        $("#factcheckInputHeader").val(example).focus();
+      });
+
+      // Submit button
+      $("#factcheckSubmitHeader").on("click", function (e) {
+        e.preventDefault();
+        HeaderSearch.startFactCheck();
+      });
+
+      // Enter key
+      $("#factcheckInputHeader").on("keypress", function (e) {
+        if (e.which === 13) {
+          e.preventDefault();
+          HeaderSearch.startFactCheck();
+        }
+      });
+    },
+
+    startFactCheck: function () {
+      const input = $("#factcheckInputHeader").val().trim();
+
+      if (!input) {
+        alert("Please enter a URL, title, or claim to fact-check");
+        return;
+      }
+
+      // Detect input type if auto
+      let inputType = this.currentInputType;
+      if (inputType === "auto") {
+        inputType = this.detectInputType(input);
+      }
+
+      // Show loading state
+      const $btn = $("#factcheckSubmitHeader");
+      $btn.prop("disabled", true).addClass("loading");
+      $(".btn-text").hide();
+      $(".btn-loading").show();
+
+      // Create report
+      $.ajax({
+        url: aiVerifyFactcheck.ajax_url,
+        type: "POST",
+        data: {
+          action: "ai_verify_start_factcheck",
+          nonce: aiVerifyFactcheck.nonce,
+          input_type: inputType,
+          input_value: input,
+        },
+        success: function (response) {
+          if (response.success) {
+            // Redirect to results page
+            const resultsUrl =
+              aiVerifyFactcheck.results_url +
+              "?report=" +
+              response.data.report_id;
+            window.location.href = resultsUrl;
+          } else {
+            alert(response.data.message || "Failed to start fact-check");
+            HeaderSearch.resetButton();
+          }
+        },
+        error: function () {
+          alert("Connection error. Please try again.");
+          HeaderSearch.resetButton();
+        },
+      });
+    },
+
+    detectInputType: function (input) {
+      if (input.match(/^https?:\/\//)) {
+        return "url";
+      } else if (input.length > 100) {
+        return "phrase";
+      } else {
+        return "title";
+      }
+    },
+
+    resetButton: function () {
+      const $btn = $("#factcheckSubmitHeader");
+      $btn.prop("disabled", false).removeClass("loading");
+      $(".btn-text").show();
+      $(".btn-loading").hide();
+    },
+  };
+
+  // Initialize everything on document ready
+  $(document).ready(function () {
+    SubscriptionManager.init();
+    HeaderSearch.init();
+
+    // Update usage counter periodically
+    setInterval(function () {
+      UsageTracker.updateCounter();
+    }, 5000);
+  });
+
+  // Export for use in other parts of the script
+  window.FactcheckCookies = FactcheckCookies;
+  window.UsageTracker = UsageTracker;
+  window.SubscriptionManager = SubscriptionManager;
+})(jQuery);
+
 (function ($) {
   "use strict";
 
