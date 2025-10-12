@@ -135,7 +135,8 @@ class AI_Verify_Ajax {
         $url = add_query_arg(array(
             'key' => $api_key,
             'query' => urlencode($query),
-            'languageCode' => 'en'
+            'languageCode' => 'en',
+            'pageSize' => 10  // Get more results to filter
         ), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
         
         error_log('AI Verify: Calling URL: ' . $url);
@@ -151,14 +152,26 @@ class AI_Verify_Ajax {
         error_log('AI Verify: API Response: ' . print_r($body, true));
         
         $factchecks = array();
+        $current_year = date('Y');
+        $max_age = get_option('ai_verify_factcheck_max_age', 2);
+        $min_year = $current_year - $max_age;
         
         if (isset($body['claims']) && is_array($body['claims'])) {
-            foreach (array_slice($body['claims'], 0, 3) as $claim) {
+            foreach ($body['claims'] as $claim) {
                 if (!isset($claim['claimReview'][0])) {
                     continue;
                 }
                 
                 $review = $claim['claimReview'][0];
+                
+                // Skip old fact-checks based on settings
+                if ($max_age < 999 && isset($review['reviewDate'])) {
+                    $review_year = (int) date('Y', strtotime($review['reviewDate']));
+                    if ($review_year < $min_year) {
+                        error_log('AI Verify: Skipping old fact-check from ' . $review_year);
+                        continue;
+                    }
+                }
                 
                 $factchecks[] = array(
                     'claim' => isset($claim['text']) ? $claim['text'] : 'No claim text',
@@ -167,6 +180,11 @@ class AI_Verify_Ajax {
                     'url' => isset($review['url']) ? $review['url'] : '#',
                     'date' => isset($review['reviewDate']) ? self::format_date($review['reviewDate']) : ''
                 );
+                
+                // Stop when we have 3 recent fact-checks
+                if (count($factchecks) >= 3) {
+                    break;
+                }
             }
         }
         

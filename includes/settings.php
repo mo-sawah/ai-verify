@@ -30,6 +30,7 @@ class AI_Verify_Settings {
         register_setting('ai_verify_settings', 'ai_verify_openrouter_key');
         register_setting('ai_verify_settings', 'ai_verify_openrouter_model');
         register_setting('ai_verify_settings', 'ai_verify_google_factcheck_key');
+        register_setting('ai_verify_settings', 'ai_verify_factcheck_max_age');
         register_setting('ai_verify_settings', 'ai_verify_cta_title');
         register_setting('ai_verify_settings', 'ai_verify_cta_description');
         register_setting('ai_verify_settings', 'ai_verify_cta_button_1_text');
@@ -53,6 +54,7 @@ class AI_Verify_Settings {
             update_option('ai_verify_openrouter_key', sanitize_text_field($_POST['ai_verify_openrouter_key']));
             update_option('ai_verify_openrouter_model', sanitize_text_field($_POST['ai_verify_openrouter_model']));
             update_option('ai_verify_google_factcheck_key', sanitize_text_field($_POST['ai_verify_google_factcheck_key']));
+            update_option('ai_verify_factcheck_max_age', intval($_POST['ai_verify_factcheck_max_age']));
             update_option('ai_verify_cta_title', sanitize_text_field($_POST['ai_verify_cta_title']));
             update_option('ai_verify_cta_description', sanitize_textarea_field($_POST['ai_verify_cta_description']));
             update_option('ai_verify_cta_button_1_text', sanitize_text_field($_POST['ai_verify_cta_button_1_text']));
@@ -69,6 +71,7 @@ class AI_Verify_Settings {
         $openrouter_key = get_option('ai_verify_openrouter_key', '');
         $openrouter_model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
         $google_key = get_option('ai_verify_google_factcheck_key', '');
+        $factcheck_max_age = get_option('ai_verify_factcheck_max_age', 2);
         $cta_title = get_option('ai_verify_cta_title', 'Want More Verification Tools?');
         $cta_description = get_option('ai_verify_cta_description', 'Access our full suite of professional disinformation monitoring and investigation tools');
         $cta_btn_1_text = get_option('ai_verify_cta_button_1_text', '🔍 OSINT Search');
@@ -140,6 +143,21 @@ class AI_Verify_Settings {
                         <td>
                             <input type="text" name="ai_verify_google_factcheck_key" id="ai_verify_google_factcheck_key" value="<?php echo esc_attr($google_key); ?>" class="regular-text">
                             <p class="description">Get your API key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> (Free)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="ai_verify_factcheck_max_age">Show Fact-Checks From</label>
+                        </th>
+                        <td>
+                            <select name="ai_verify_factcheck_max_age" id="ai_verify_factcheck_max_age">
+                                <option value="1" <?php selected($factcheck_max_age, 1); ?>>Last year only</option>
+                                <option value="2" <?php selected($factcheck_max_age, 2); ?>>Last 2 years</option>
+                                <option value="3" <?php selected($factcheck_max_age, 3); ?>>Last 3 years</option>
+                                <option value="5" <?php selected($factcheck_max_age, 5); ?>>Last 5 years</option>
+                                <option value="999" <?php selected($factcheck_max_age, 999); ?>>All time (no filter)</option>
+                            </select>
+                            <p class="description">Filter out old fact-checks to show only recent ones</p>
                         </td>
                     </tr>
                     
