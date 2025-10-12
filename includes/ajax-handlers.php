@@ -97,7 +97,12 @@ class AI_Verify_Ajax {
         $query = sanitize_text_field($_POST['query']);
         $api_key = get_option('ai_verify_google_factcheck_key');
         
+        // Debug logging
+        error_log('AI Verify: Searching fact-checks for: ' . $query);
+        error_log('AI Verify: API Key configured: ' . (!empty($api_key) ? 'Yes' : 'No'));
+        
         if (empty($api_key)) {
+            error_log('AI Verify: No Google API key configured');
             wp_send_json_success(array('factchecks' => array()));
             return;
         }
@@ -108,14 +113,18 @@ class AI_Verify_Ajax {
             'languageCode' => 'en'
         ), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
         
+        error_log('AI Verify: Calling URL: ' . $url);
+        
         $response = wp_remote_get($url, array('timeout' => 15));
         
         if (is_wp_error($response)) {
+            error_log('AI Verify: API Error: ' . $response->get_error_message());
             wp_send_json_success(array('factchecks' => array()));
             return;
         }
         
         $body = json_decode(wp_remote_retrieve_body($response), true);
+        error_log('AI Verify: API Response: ' . print_r($body, true));
         
         $factchecks = array();
         
@@ -136,6 +145,8 @@ class AI_Verify_Ajax {
                 );
             }
         }
+        
+        error_log('AI Verify: Found ' . count($factchecks) . ' fact-checks');
         
         wp_send_json_success(array('factchecks' => $factchecks));
     }

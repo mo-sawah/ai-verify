@@ -25,7 +25,7 @@ $cta_btn_3_url = get_option('ai_verify_cta_button_3_url', 'https://disinformatio
     <h2 class="ai-verify-title">🔍 Verify This Yourself</h2>
     <p class="ai-verify-subtitle">Use these professional tools to fact-check and investigate claims independently</p>
 
-    <?php if ($atts['show_image_search'] === 'yes' && $featured_image_url): ?>
+    <?php if ($atts['show_image_search'] === 'yes'): ?>
     <!-- Reverse Image Search -->
     <div class="ai-verify-section">
         <h3 class="ai-verify-section-header">
@@ -35,6 +35,7 @@ $cta_btn_3_url = get_option('ai_verify_cta_button_3_url', 'https://disinformatio
             Reverse Image Search
         </h3>
         <p class="ai-verify-description">Check if this image has been used elsewhere or in different contexts</p>
+        <?php if ($featured_image_url): ?>
         <div class="ai-verify-search-buttons">
             <a href="<?php echo esc_url($google_image_search); ?>" target="_blank" rel="noopener" class="ai-verify-btn">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
@@ -55,6 +56,11 @@ $cta_btn_3_url = get_option('ai_verify_cta_button_3_url', 'https://disinformatio
                 TinEye
             </a>
         </div>
+        <?php else: ?>
+        <div class="ai-verify-notice">
+            ℹ️ This post doesn't have a featured image. Set a featured image to enable reverse image search.
+        </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 

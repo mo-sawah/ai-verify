@@ -440,6 +440,26 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* Notice Styles */
+.ai-verify-notice {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.s-light .ai-verify-notice {
+  background: #fff9e6;
+  color: #744210;
+  border: 1px solid #fbd38d;
+}
+
+.s-dark .ai-verify-notice {
+  background: rgba(237, 137, 54, 0.2);
+  color: #fbd38d;
+  border: 1px solid rgba(237, 137, 54, 0.3);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .ai-verify-tools {

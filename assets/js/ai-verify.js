@@ -120,7 +120,13 @@
     }
 
     // Get post title as search query
-    const postTitle = document.title.split("|")[0].trim();
+    const postTitle = document.title
+      .split("|")[0]
+      .split("–")[0]
+      .split("-")[0]
+      .trim();
+
+    console.log("Loading fact-checks for:", postTitle);
 
     $.ajax({
       url: aiVerifyData.ajax_url,
@@ -131,17 +137,24 @@
         query: postTitle,
       },
       success: function (response) {
-        if (response.success && response.data.factchecks.length > 0) {
+        console.log("Fact-check response:", response);
+
+        if (
+          response.success &&
+          response.data.factchecks &&
+          response.data.factchecks.length > 0
+        ) {
           renderFactChecks(response.data.factchecks);
         } else {
           $factCheckContainer.html(
-            '<div class="ai-verify-loading">No related fact-checks found.</div>'
+            '<div class="ai-verify-notice">ℹ️ No related fact-checks found for this topic. This could mean the claim hasn\'t been fact-checked yet by major organizations.</div>'
           );
         }
       },
-      error: function () {
+      error: function (xhr, status, error) {
+        console.error("Fact-check error:", error);
         $factCheckContainer.html(
-          '<div class="ai-verify-loading">Unable to load fact-checks.</div>'
+          '<div class="ai-verify-notice">⚠️ Unable to load fact-checks. Make sure Google Fact Check API key is configured in Settings → AI Verify.</div>'
         );
       },
     });
