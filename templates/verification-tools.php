@@ -7,7 +7,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-$google_image_search = $featured_image_url ? 'https://images.google.com/searchbyimage?image_url=' . urlencode($featured_image_url) : '#';
+// Google Lens URL (new reverse image search)
+$google_image_search = $featured_image_url ? 'https://lens.google.com/uploadbyurl?url=' . urlencode($featured_image_url) : '#';
 $yandex_search = $featured_image_url ? 'https://yandex.com/images/search?rpt=imageview&url=' . urlencode($featured_image_url) : '#';
 $tineye_search = $featured_image_url ? 'https://tineye.com/search?url=' . urlencode($featured_image_url) : '#';
 

@@ -107,6 +107,31 @@ class AI_Verify_Ajax {
             return;
         }
         
+        // Try the search
+        $factchecks = self::search_factchecks($api_key, $query);
+        
+        // If no results and query has multiple words, try with just first 2-3 key words
+        if (empty($factchecks) && str_word_count($query) > 3) {
+            $words = explode(' ', $query);
+            $shorter_query = implode(' ', array_slice($words, 0, 3));
+            error_log('AI Verify: Trying shorter query: ' . $shorter_query);
+            $factchecks = self::search_factchecks($api_key, $shorter_query);
+        }
+        
+        // If still no results, try just the first significant word
+        if (empty($factchecks) && str_word_count($query) > 1) {
+            $words = explode(' ', $query);
+            $single_word = $words[0];
+            error_log('AI Verify: Trying single word: ' . $single_word);
+            $factchecks = self::search_factchecks($api_key, $single_word);
+        }
+        
+        error_log('AI Verify: Final count: ' . count($factchecks) . ' fact-checks');
+        
+        wp_send_json_success(array('factchecks' => $factchecks));
+    }
+    
+    private static function search_factchecks($api_key, $query) {
         $url = add_query_arg(array(
             'key' => $api_key,
             'query' => urlencode($query),
@@ -119,8 +144,7 @@ class AI_Verify_Ajax {
         
         if (is_wp_error($response)) {
             error_log('AI Verify: API Error: ' . $response->get_error_message());
-            wp_send_json_success(array('factchecks' => array()));
-            return;
+            return array();
         }
         
         $body = json_decode(wp_remote_retrieve_body($response), true);
@@ -146,9 +170,7 @@ class AI_Verify_Ajax {
             }
         }
         
-        error_log('AI Verify: Found ' . count($factchecks) . ' fact-checks');
-        
-        wp_send_json_success(array('factchecks' => $factchecks));
+        return $factchecks;
     }
     
     private static function format_date($date_string) {

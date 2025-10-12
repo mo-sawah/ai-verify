@@ -119,14 +119,50 @@
       return;
     }
 
-    // Get post title as search query
-    const postTitle = document.title
+    // Get post title and extract key terms
+    let postTitle = document.title
       .split("|")[0]
       .split("–")[0]
       .split("-")[0]
       .trim();
 
-    console.log("Loading fact-checks for:", postTitle);
+    // Extract key names and topics (remove common words)
+    const stopWords = [
+      "the",
+      "a",
+      "an",
+      "and",
+      "or",
+      "but",
+      "in",
+      "on",
+      "at",
+      "to",
+      "for",
+      "of",
+      "about",
+      "as",
+      "by",
+      "with",
+      "from",
+      "never",
+      "claimed",
+      "makes",
+      "false",
+      "claims",
+      "says",
+      "said",
+    ];
+    const words = postTitle
+      .toLowerCase()
+      .split(" ")
+      .filter((word) => word.length > 3 && !stopWords.includes(word));
+
+    // Use first 3-5 important words
+    const searchQuery = words.slice(0, 5).join(" ");
+
+    console.log("Original title:", postTitle);
+    console.log("Searching fact-checks for:", searchQuery);
 
     $.ajax({
       url: aiVerifyData.ajax_url,
