@@ -8,24 +8,17 @@ if (!defined('ABSPATH')) {
 }
 ?>
 
-<div class="factcheck-email-gate" id="factcheckEmailGate" style="display: none;">
-    <div class="email-gate-overlay"></div>
-    <div class="email-gate-modal">
-        <div class="email-gate-content">
-            <button class="email-gate-close" id="emailGateClose" aria-label="Close">
-                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
-            
-            <div class="email-gate-header">
-                <div class="email-gate-icon">
+    <!-- NEW: Paywall Overlay (not popup modal) -->
+    <div class="factcheck-paywall-overlay">
+        <div class="paywall-content-wrapper">
+            <div class="paywall-header">
+                <div class="paywall-icon">
                     <svg width="64" height="64" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                     </svg>
                 </div>
                 <h2>Analysis Complete! 🎉</h2>
-                <p>Choose your plan to view the comprehensive fact-check report</p>
+                <p>Choose your plan to view the full fact-check report</p>
             </div>
             
             <div class="subscription-plans">
@@ -71,7 +64,7 @@ if (!defined('ABSPATH')) {
                     </button>
                 </div>
                 
-                <!-- Paid Plan -->
+                <!-- Pro Plan -->
                 <div class="plan-card pro-plan" data-plan="pro">
                     <div class="plan-badge recommended">Recommended</div>
                     <div class="plan-header">
@@ -165,16 +158,9 @@ if (!defined('ABSPATH')) {
                         <path d="M12 2v4c3.31 0 6 2.69 6 6h4c0-5.52-4.48-10-10-10z"></path>
                     </svg>
                 </button>
-                
-                <p class="usage-note">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span id="usageCounter">5 fact-checks remaining this month</span>
-                </p>
             </form>
             
-            <!-- Pro Plan Form (Stripe Payment) -->
+            <!-- Pro Plan Form -->
             <form id="proPlanForm" class="plan-form" style="display: none;">
                 <div class="stripe-payment-demo">
                     <div class="payment-header">
@@ -222,13 +208,6 @@ if (!defined('ABSPATH')) {
                         </svg>
                     </button>
                 </div>
-                
-                <p class="email-gate-note">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                    </svg>
-                    Secure checkout powered by Stripe. Your payment information is never stored.
-                </p>
             </form>
             
             <div class="email-gate-trust">
@@ -240,4 +219,3 @@ if (!defined('ABSPATH')) {
             </div>
         </div>
     </div>
-</div>
