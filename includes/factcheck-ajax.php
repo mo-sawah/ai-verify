@@ -14,8 +14,8 @@ class AI_Verify_Factcheck_Ajax {
         add_action('wp_ajax_ai_verify_start_factcheck', array(__CLASS__, 'start_factcheck'));
         add_action('wp_ajax_nopriv_ai_verify_start_factcheck', array(__CLASS__, 'start_factcheck'));
         
-        add_action('wp_ajax_ai_verify_submit_email', array(__CLASS__, 'submit_email'));
-        add_action('wp_ajax_nopriv_ai_verify_submit_email', array(__CLASS__, 'submit_email'));
+        add_action('wp_ajax_ai_verify_submit_email', array(__CLASS__, 'handle_email_submission'));
+        add_action('wp_ajax_nopriv_ai_verify_submit_email', array(__CLASS__, 'handle_email_submission'));
         
         add_action('wp_ajax_ai_verify_get_report', array(__CLASS__, 'get_report'));
         add_action('wp_ajax_nopriv_ai_verify_get_report', array(__CLASS__, 'get_report'));
