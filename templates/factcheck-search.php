@@ -109,3 +109,25 @@ if (!defined('ABSPATH')) {
         </div>
     </div>
 </div>
+
+<script>
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const urlToAnalyze = params.get('prefill_url');
+
+                if (urlToAnalyze) {
+                    const inputField = document.getElementById('factcheck-input');
+                    const submitButton = document.getElementById('factcheck-submit');
+
+                    if (inputField && submitButton) {
+                        // Decode the URL, set it in the input, and click the button
+                        inputField.value = decodeURIComponent(urlToAnalyze);
+                        submitButton.click();
+                    }
+                }
+            } catch (e) {
+                console.error("Error auto-analyzing URL:", e);
+            }
+        });
+    </script>
