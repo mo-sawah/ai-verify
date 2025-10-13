@@ -232,67 +232,98 @@ Article: {$content}";
     }
     
     /**
-     * Check claim with Perplexity AI (HAS BUILT-IN WEB SEARCH)
-     */
-    private static function check_with_perplexity($claim, $context) {
-        $api_key = get_option('ai_verify_perplexity_key');
-        
-        if (empty($api_key)) {
-            error_log('AI Verify: Perplexity API key not configured');
-            return new WP_Error('no_api_key', 'Perplexity API key not configured');
-        }
-        
-        $prompt = "You are a professional fact-checker with access to current web search. Fact-check this claim thoroughly by searching for evidence.
+ * Check claim with Perplexity AI (IMPROVED with logging)
+ */
+private static function check_with_perplexity($claim, $context) {
+    $api_key = get_option('ai_verify_perplexity_key');
+    
+    if (empty($api_key)) {
+        error_log('AI Verify: Perplexity API key not configured');
+        return array(
+            'rating' => 'Unverified',
+            'explanation' => 'Perplexity API key not configured. Please add your API key in Settings.',
+            'sources' => array(),
+            'confidence' => 0.3
+        );
+    }
+    
+    error_log('AI Verify: Checking with Perplexity: ' . substr($claim, 0, 100));
+    
+    $prompt = "Fact-check this claim by searching the web. Be specific and provide evidence.
 
 Claim: {$claim}
-Context: {$context}
 
-Search the web and provide:
-1. Rating: True/False/Mostly True/Mostly False/Misleading/Unproven
-2. Detailed explanation with evidence
-3. Sources you found (with URLs)
-4. Evidence supporting the claim
-5. Evidence contradicting the claim
-6. Any red flags (propaganda techniques, logical fallacies)
-
-Return ONLY valid JSON:
+Search the web and provide a JSON response:
 {
-    \"rating\": \"...\",
-    \"explanation\": \"...\",
-    \"sources\": [{\"name\": \"...\", \"url\": \"...\"}],
-    \"evidence_for\": [\"...\"],
-    \"evidence_against\": [\"...\"],
-    \"red_flags\": [\"...\"],
-    \"confidence\": 0.0-1.0
+    \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
+    \"explanation\": \"detailed explanation with evidence\",
+    \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
+    \"evidence_for\": [\"supporting evidence\"],
+    \"evidence_against\": [\"contradicting evidence\"],
+    \"red_flags\": [\"any propaganda techniques\"],
+    \"confidence\": 0.8
 }";
-        
-        $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json'
+    
+    $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
+        'headers' => array(
+            'Authorization' => 'Bearer ' . $api_key,
+            'Content-Type' => 'application/json'
+        ),
+        'body' => json_encode(array(
+            'model' => 'llama-3.1-sonar-large-128k-online',
+            'messages' => array(
+                array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON.'),
+                array('role' => 'user', 'content' => $prompt)
             ),
-            'body' => json_encode(array(
-                'model' => 'llama-3.1-sonar-large-128k-online',
-                'messages' => array(
-                    array('role' => 'system', 'content' => 'You are a fact-checker with web search access.'),
-                    array('role' => 'user', 'content' => $prompt)
-                ),
-                'temperature' => 0.2,
-                'max_tokens' => 2000
-            )),
-            'timeout' => 90
-        ));
-        
-        if (is_wp_error($response)) {
-            error_log('AI Verify: Perplexity API error: ' . $response->get_error_message());
-            return $response;
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $content = $body['choices'][0]['message']['content'] ?? '';
-        
-        return self::parse_fact_check_response($content);
+            'temperature' => 0.2,
+            'max_tokens' => 2000
+        )),
+        'timeout' => 90
+    ));
+    
+    if (is_wp_error($response)) {
+        error_log('AI Verify: Perplexity API error: ' . $response->get_error_message());
+        return array(
+            'rating' => 'Unverified',
+            'explanation' => 'API connection error: ' . $response->get_error_message(),
+            'sources' => array(),
+            'confidence' => 0.3
+        );
     }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    $body = wp_remote_retrieve_body($response);
+    
+    error_log('AI Verify: Perplexity response code: ' . $status_code);
+    error_log('AI Verify: Perplexity response: ' . substr($body, 0, 500));
+    
+    if ($status_code !== 200) {
+        error_log('AI Verify: Perplexity API error - Status ' . $status_code . ': ' . $body);
+        return array(
+            'rating' => 'Unverified',
+            'explanation' => 'API error (Status ' . $status_code . '). Check your API key and credits.',
+            'sources' => array(),
+            'confidence' => 0.3
+        );
+    }
+    
+    $data = json_decode($body, true);
+    $content = $data['choices'][0]['message']['content'] ?? '';
+    
+    if (empty($content)) {
+        error_log('AI Verify: Empty response from Perplexity');
+        return array(
+            'rating' => 'Unverified',
+            'explanation' => 'Empty response from API',
+            'sources' => array(),
+            'confidence' => 0.3
+        );
+    }
+    
+    error_log('AI Verify: Perplexity content: ' . substr($content, 0, 300));
+    
+    return self::parse_fact_check_response($content);
+}
     
     /**
      * Check claim with OpenRouter AI
@@ -361,7 +392,7 @@ Return ONLY valid JSON:
     }
 
     /**
-     * Parse fact-check response from AI
+     * Parse fact-check response from AI (IMPROVED)
      */
     private static function parse_fact_check_response($content) {
         // Try to extract JSON
@@ -369,15 +400,34 @@ Return ONLY valid JSON:
         
         if (!empty($matches[0])) {
             $result = json_decode($matches[0], true);
-            if ($result) {
-                return $result;
+            
+            if ($result && isset($result['rating'])) {
+                error_log('AI Verify: Successfully parsed JSON result');
+                
+                // Ensure all fields exist
+                return array(
+                    'rating' => $result['rating'] ?? 'Unknown',
+                    'explanation' => $result['explanation'] ?? 'No explanation provided',
+                    'sources' => $result['sources'] ?? array(),
+                    'evidence_for' => $result['evidence_for'] ?? array(),
+                    'evidence_against' => $result['evidence_against'] ?? array(),
+                    'red_flags' => $result['red_flags'] ?? array(),
+                    'confidence' => isset($result['confidence']) ? floatval($result['confidence']) : 0.5
+                );
             }
         }
         
-        // Fallback parsing
+        error_log('AI Verify: Failed to parse JSON, using text fallback');
+        
+        // Fallback: Try to extract rating from text
+        $rating = 'Unknown';
+        if (preg_match('/(true|false|mostly true|mostly false|misleading|unverified)/i', $content, $rating_match)) {
+            $rating = ucwords($rating_match[1]);
+        }
+        
         return array(
-            'rating' => 'Unknown',
-            'explanation' => $content,
+            'rating' => $rating,
+            'explanation' => strip_tags($content),
             'sources' => array(),
             'evidence_for' => array(),
             'evidence_against' => array(),
@@ -498,7 +548,7 @@ Return ONLY valid JSON:
     }
     
     /**
-     * Calculate overall credibility score
+     * Calculate overall credibility score (IMPROVED)
      */
     public static function calculate_overall_score($factcheck_results) {
         if (empty($factcheck_results)) {
@@ -507,23 +557,28 @@ Return ONLY valid JSON:
         
         $total_score = 0;
         $total_weight = 0;
+        $unverified_count = 0;
         
         foreach ($factcheck_results as $result) {
             $rating = strtolower($result['rating'] ?? 'unknown');
             $confidence = floatval($result['confidence'] ?? 0.5);
             
             // Convert rating to score
-            $score = 0.5; // default
+            $score = 0.5; // default for unknown/unverified
+            
             if (strpos($rating, 'true') !== false && strpos($rating, 'false') === false) {
-                $score = 1.0;
+                $score = 1.0; // True
             } elseif (strpos($rating, 'mostly true') !== false) {
-                $score = 0.75;
+                $score = 0.75; // Mostly True
             } elseif (strpos($rating, 'mixture') !== false || strpos($rating, 'misleading') !== false) {
-                $score = 0.5;
+                $score = 0.4; // Misleading/Mixture
             } elseif (strpos($rating, 'mostly false') !== false) {
-                $score = 0.25;
+                $score = 0.25; // Mostly False
             } elseif (strpos($rating, 'false') !== false) {
-                $score = 0;
+                $score = 0; // False
+            } elseif (strpos($rating, 'unverified') !== false || strpos($rating, 'unknown') !== false) {
+                $unverified_count++;
+                $score = 0.5; // Unverified
             }
             
             $weight = $confidence;
@@ -535,7 +590,15 @@ Return ONLY valid JSON:
             return 50;
         }
         
-        return round(($total_score / $total_weight) * 100, 2);
+        $calculated_score = ($total_score / $total_weight) * 100;
+        
+        // Penalty for too many unverified claims
+        if ($unverified_count > count($factcheck_results) * 0.7) {
+            // If more than 70% are unverified, cap the score
+            $calculated_score = min($calculated_score, 60);
+        }
+        
+        return round($calculated_score, 2);
     }
     
     /**

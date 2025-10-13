@@ -10,16 +10,19 @@ let currentReportId = null;
  */
 
 (function ($) {
-  "use strict";
+  ("use strict");
 
-  // Cookie Management
+  // Cookie Management (FIXED)
   const FactcheckCookies = {
     // Set cookie
     set: function (name, value, days) {
       const d = new Date();
       d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
       const expires = "expires=" + d.toUTCString();
-      document.cookie = name + "=" + value + ";" + expires + ";path=/";
+      const cookie =
+        name + "=" + value + ";" + expires + ";path=/;SameSite=Lax";
+      document.cookie = cookie;
+      console.log("AI Verify: Set cookie:", cookie);
     },
 
     // Get cookie
@@ -29,8 +32,13 @@ let currentReportId = null;
       for (let i = 0; i < ca.length; i++) {
         let c = ca[i];
         while (c.charAt(0) == " ") c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+        if (c.indexOf(nameEQ) == 0) {
+          const value = c.substring(nameEQ.length, c.length);
+          console.log("AI Verify: Found cookie", name, "=", value);
+          return value;
+        }
       }
+      console.log("AI Verify: Cookie not found:", name);
       return null;
     },
 
@@ -38,12 +46,14 @@ let currentReportId = null;
     delete: function (name) {
       document.cookie =
         name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      console.log("AI Verify: Deleted cookie:", name);
     },
   };
 
-  // Usage Tracking System
+  // Usage Tracking System (FIXED)
   const UsageTracker = {
     cookieName: "ai_verify_usage",
+    reportCookieName: "ai_verify_completed_", // prefix for completed reports
     maxFreeUses: 5,
 
     // Get current usage data
@@ -53,8 +63,9 @@ let currentReportId = null;
         return { count: 0, expires: null };
       }
       try {
-        return JSON.parse(data);
+        return JSON.parse(decodeURIComponent(data));
       } catch (e) {
+        console.error("AI Verify: Failed to parse usage cookie", e);
         return { count: 0, expires: null };
       }
     },
@@ -70,10 +81,27 @@ let currentReportId = null;
           count: 0,
           expires: expires.toISOString(),
         };
-        FactcheckCookies.set(this.cookieName, JSON.stringify(newUsage), 30);
+        FactcheckCookies.set(
+          this.cookieName,
+          encodeURIComponent(JSON.stringify(newUsage)),
+          30
+        );
         return newUsage;
       }
       return usage;
+    },
+
+    // Check if report was already completed
+    hasCompletedReport: function (reportId) {
+      const cookieName = this.reportCookieName + reportId;
+      return FactcheckCookies.get(cookieName) !== null;
+    },
+
+    // Mark report as completed
+    markReportCompleted: function (reportId) {
+      const cookieName = this.reportCookieName + reportId;
+      FactcheckCookies.set(cookieName, "completed", 30);
+      console.log("AI Verify: Marked report completed:", reportId);
     },
 
     // Check if user has uses remaining
@@ -99,7 +127,12 @@ let currentReportId = null;
         usage.expires = expires.toISOString();
       }
 
-      FactcheckCookies.set(this.cookieName, JSON.stringify(usage), 30);
+      FactcheckCookies.set(
+        this.cookieName,
+        encodeURIComponent(JSON.stringify(usage)),
+        30
+      );
+      console.log("AI Verify: Usage count:", usage.count);
       return usage.count;
     },
 
@@ -199,7 +232,10 @@ let currentReportId = null;
       // Increment usage
       UsageTracker.incrementUsage();
 
-      // Submit via AJAX (same as before)
+      // Mark this report as completed (so email gate won't show again for this report)
+      UsageTracker.markReportCompleted(currentReportId);
+
+      // Submit via AJAX
       $.ajax({
         url: aiVerifyFactcheck.ajax_url,
         type: "POST",
@@ -536,7 +572,7 @@ let currentReportId = null;
   }
 
   /**
-   * Initialize results page
+   * Initialize results page (FIXED)
    */
   function initResultsPage() {
     if ($("#factcheckResults").length === 0) {
@@ -554,13 +590,21 @@ let currentReportId = null;
 
     currentReportId = reportId;
 
+    // Check if report was already completed
+    if (UsageTracker.hasCompletedReport(reportId)) {
+      console.log("AI Verify: Report already completed, loading directly");
+      // Skip email gate and load report directly
+      setTimeout(function () {
+        $("#factcheckLoading").fadeOut(300, function () {
+          startProcessing();
+        });
+      }, 1000);
+      return;
+    }
+
     // Start processing flow
     setTimeout(function () {
-      // --- THIS IS THE ONLY CHANGE HERE ---
-      // Instead of the old showEmailGate(), just fade in the new one by its ID
       $("#factcheckEmailGate").fadeIn(300);
-
-      // The new SubscriptionManager will handle everything else
       $("#factcheckLoading").fadeOut(300);
     }, 2000);
 
