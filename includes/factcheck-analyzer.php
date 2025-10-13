@@ -940,10 +940,19 @@ Article: {$content}";
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
         error_log('AI Verify: Starting Single Call analysis with OpenRouter.');
 
-        // First, get search results from Tavily
-        $web_results = self::search_web_tavily($context . ' ' . $content);
+        // First, try to get search results from Tavily using ONLY the article's title/context.
+        $web_results = self::search_web_tavily($context);
+
+        // If Tavily fails or returns no results, fallback to Firecrawl Search as a backup.
         if (empty($web_results)) {
-            return new WP_Error('search_failed', 'Could not retrieve web search results to perform analysis.');
+            error_log('AI Verify: Tavily failed or returned no results. Falling back to Firecrawl Search.');
+            $web_results = self::search_web_firecrawl($context);
+        }
+
+        // If both methods fail, then we return an error.
+        if (empty($web_results)) {
+            error_log('AI Verify: All web search methods (Tavily and Firecrawl) failed.');
+            return new WP_Error('search_failed', 'Could not retrieve web search results from any provider to perform analysis.');
         }
 
         $web_context = "\n\n=== WEB SEARCH RESULTS ===\n";
