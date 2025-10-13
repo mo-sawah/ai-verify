@@ -250,117 +250,117 @@ class AI_Verify_Factcheck_Ajax {
     }
 
     /**
-     * Background processor (runs via WP Cron)
+     * Background processor (runs via WP Cron) - UPDATED FOR SINGLE CALL MODES
      */
     public static function background_process_report($report_id) {
         error_log("AI Verify: Background processing started for report: $report_id");
-        
-        // No time limit for background process
         set_time_limit(0);
-        
+
         $report = AI_Verify_Factcheck_Database::get_report($report_id);
-        
         if (!$report) {
             error_log("AI Verify: Report not found: $report_id");
             return;
         }
-        
+
         try {
-            $input_type = $report['input_type'];
-            $input_value = $report['input_value'];
+            // Get the selected provider from settings
+            $provider = get_option('ai_verify_factcheck_provider', 'perplexity');
             
-            // Step 1: Scrape or search
-            if ($input_type === 'url') {
-                $scraped = AI_Verify_Factcheck_Scraper::scrape_url($input_value);
-                
+            // Step 1: Get content (same as before)
+            $content = '';
+            $context = '';
+            if ($report['input_type'] === 'url') {
+                $scraped = AI_Verify_Factcheck_Scraper::scrape_url($report['input_value']);
                 if (is_wp_error($scraped)) {
                     throw new Exception($scraped->get_error_message());
                 }
-                
-                AI_Verify_Factcheck_Database::save_scraped_content(
-                    $report_id,
-                    json_encode($scraped),
-                    'article'
-                );
-                
+                AI_Verify_Factcheck_Database::save_scraped_content($report_id, json_encode($scraped), 'article');
                 $content = $scraped['content'];
                 $context = $scraped['title'];
-                
             } else {
-                $search_result = AI_Verify_Factcheck_Scraper::search_phrase($input_value);
+                $content = $report['input_value'];
+                $context = $report['input_value'];
+            }
+
+            // Step 2: ROUTING LOGIC - Choose analysis method
+            if ($provider === 'single_call_perplexity' || $provider === 'single_call_openrouter') {
                 
-                if ($search_result['source'] === 'google_factcheck' && !empty($search_result['results'])) {
-                    $factcheck_results = $search_result['results'];
-                    $score = 70;
-                    $rating = 'See fact-checks below';
-                    
-                    AI_Verify_Factcheck_Database::save_results(
-                        $report_id,
-                        $factcheck_results,
-                        $score,
-                        $rating,
-                        array(),
-                        array()
-                    );
-                    
-                    error_log("AI Verify: Completed (Google FC): $report_id");
-                    return;
+                // === NEW SINGLE CALL WORKFLOW ===
+                error_log("AI Verify: Using Single Call workflow with provider: $provider");
+                
+                $result_data = null;
+                if ($provider === 'single_call_perplexity') {
+                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_perplexity($content, $context);
+                } else {
+                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_openrouter($content, $context);
+                }
+
+                if (is_wp_error($result_data)) {
+                    throw new Exception($result_data->get_error_message());
                 }
                 
-                $content = $input_value;
-                $context = $input_value;
-            }
-            
-            // Step 2: Detect propaganda
-            $propaganda = AI_Verify_Factcheck_Analyzer::detect_propaganda($content);
-            
-            // Step 3: Extract claims
-            $claims = AI_Verify_Factcheck_Analyzer::extract_claims($content);
-            AI_Verify_Factcheck_Database::save_claims($report_id, $claims);
-            
-            // Step 4: Fact-check claims
-            $factcheck_results = AI_Verify_Factcheck_Analyzer::factcheck_claims($claims, $context, $input_value);
-            
-            // Step 5: Calculate score
-            $overall_score = AI_Verify_Factcheck_Analyzer::calculate_overall_score($factcheck_results);
-            $credibility_rating = AI_Verify_Factcheck_Analyzer::get_credibility_rating($overall_score);
-            
-            // Step 6: Collect sources
-            $sources = array();
-            if (is_array($factcheck_results)) {
+                // Extract data from the single AI response
+                $factcheck_results = $result_data['factcheck_results'] ?? array();
+                $overall_score = $result_data['overall_score'] ?? 50;
+                $credibility_rating = $result_data['credibility_rating'] ?? 'Mixed Credibility';
+                $propaganda = $result_data['propaganda_techniques'] ?? array();
+                
+                // Collect sources from the results
+                $sources = array();
                 foreach ($factcheck_results as $result) {
                     if (!empty($result['sources'])) {
                         $sources = array_merge($sources, $result['sources']);
                     }
                 }
-            }
-            
-            $unique_sources = array();
-            $seen = array();
-            if (is_array($sources)) {
-                foreach ($sources as $source) {
-                    $key = $source['url'] ?? $source['name'];
-                    if (!isset($seen[$key])) {
-                        $seen[$key] = true;
-                        $unique_sources[] = $source;
+                 $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
+
+                // Save the final results directly
+                AI_Verify_Factcheck_Database::save_results(
+                    $report_id,
+                    $factcheck_results,
+                    $overall_score,
+                    $credibility_rating,
+                    $unique_sources,
+                    $propaganda
+                );
+
+            } else {
+                
+                // === ORIGINAL MULTI-STEP WORKFLOW ===
+                error_log("AI Verify: Using Multi-Step workflow with provider: $provider");
+                
+                $propaganda = AI_Verify_Factcheck_Analyzer::detect_propaganda($content);
+                $claims = AI_Verify_Factcheck_Analyzer::extract_claims($content);
+                AI_Verify_Factcheck_Database::save_claims($report_id, $claims);
+                
+                $factcheck_results = AI_Verify_Factcheck_Analyzer::factcheck_claims($claims, $context, $report['input_value']);
+                $overall_score = AI_Verify_Factcheck_Analyzer::calculate_overall_score($factcheck_results);
+                $credibility_rating = AI_Verify_Factcheck_Analyzer::get_credibility_rating($overall_score);
+                
+                $sources = array();
+                if (is_array($factcheck_results)) {
+                    foreach ($factcheck_results as $result) {
+                        if (!empty($result['sources'])) {
+                            $sources = array_merge($sources, $result['sources']);
+                        }
                     }
                 }
+                $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
+                
+                AI_Verify_Factcheck_Database::save_results(
+                    $report_id,
+                    $factcheck_results,
+                    $overall_score,
+                    $credibility_rating,
+                    $unique_sources,
+                    $propaganda
+                );
             }
             
-            // Step 7: Save results
-            AI_Verify_Factcheck_Database::save_results(
-                $report_id,
-                $factcheck_results,
-                $overall_score,
-                $credibility_rating,
-                $unique_sources,
-                $propaganda
-            );
-            
             error_log("AI Verify: ✅ Completed successfully: $report_id");
-            
+
         } catch (Exception $e) {
-            error_log("AI Verify: ❌ Error: " . $e->getMessage());
+            error_log("AI Verify: ❌ Error processing report $report_id: " . $e->getMessage());
             AI_Verify_Factcheck_Database::update_status($report_id, 'failed');
         }
     }
