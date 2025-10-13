@@ -334,12 +334,13 @@ let currentReportId = null;
   }
 
   function startProcessing(showPaywall) {
-    updateLoadingStep("Extracting content...", 25);
+    updateLoadingStep("Starting analysis...", 0);
 
+    // Start the background process
     $.ajax({
       url: aiVerifyFactcheck.ajax_url,
       type: "POST",
-      timeout: 600000, // 10 minutes timeout
+      timeout: 30000, // Only 30 seconds - just to start
       data: {
         action: "ai_verify_process_factcheck",
         nonce: aiVerifyFactcheck.nonce,
@@ -347,21 +348,69 @@ let currentReportId = null;
       },
       success: function (response) {
         if (response.success) {
-          updateLoadingStep("Processing complete!", 100);
-          setTimeout(() => loadReport(showPaywall), 500);
+          // Process started - begin polling
+          updateLoadingStep("Processing claims...", 10);
+          pollForCompletion(showPaywall);
         } else {
           updateLoadingStep(
-            "Error: " + (response.data.message || "Processing failed"),
+            "Error: " + (response.data.message || "Failed to start"),
             0
           );
         }
       },
       error: function (xhr, status, error) {
-        console.error("AJAX Error:", status, error);
-        console.error("Response:", xhr.responseText);
-        updateLoadingStep("Connection error: " + error, 0);
+        console.error("Start Error:", status, error);
+        updateLoadingStep("Failed to start processing", 0);
       },
     });
+  }
+
+  function pollForCompletion(showPaywall) {
+    let attempts = 0;
+    const maxAttempts = 120; // 120 attempts × 3 seconds = 6 minutes max
+
+    const pollInterval = setInterval(function () {
+      attempts++;
+
+      // Update progress bar based on time (fake progress)
+      const fakeProgress = Math.min(10 + attempts * 0.7, 95);
+      updateLoadingStep("Analyzing content...", fakeProgress);
+
+      $.ajax({
+        url: aiVerifyFactcheck.ajax_url,
+        type: "POST",
+        timeout: 10000,
+        data: {
+          action: "ai_verify_check_status",
+          nonce: aiVerifyFactcheck.nonce,
+          report_id: currentReportId,
+        },
+        success: function (response) {
+          if (response.success) {
+            const status = response.data.status;
+
+            if (status === "completed") {
+              clearInterval(pollInterval);
+              updateLoadingStep("Processing complete!", 100);
+              setTimeout(() => loadReport(showPaywall), 500);
+            } else if (status === "failed") {
+              clearInterval(pollInterval);
+              updateLoadingStep("Processing failed", 0);
+            }
+            // Otherwise keep polling
+          }
+        },
+        error: function () {
+          console.log("Poll attempt " + attempts + " failed, retrying...");
+        },
+      });
+
+      // Stop after max attempts
+      if (attempts >= maxAttempts) {
+        clearInterval(pollInterval);
+        updateLoadingStep("Processing timeout - please refresh the page", 0);
+      }
+    }, 3000); // Poll every 3 seconds
   }
 
   function loadReport(showPaywall) {

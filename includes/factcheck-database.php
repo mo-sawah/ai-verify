@@ -111,9 +111,6 @@ class AI_Verify_Factcheck_Database {
         );
     }
     
-    /**
-     * Update report status
-     */
     public static function update_status($report_id, $status) {
         global $wpdb;
         
