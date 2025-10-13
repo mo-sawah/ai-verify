@@ -334,77 +334,34 @@ let currentReportId = null;
   }
 
   function startProcessing(showPaywall) {
-    updateLoadingStep("Starting analysis...", 0);
+    updateLoadingStep("Extracting content...", 25);
 
-    // Start the processing
     $.ajax({
       url: aiVerifyFactcheck.ajax_url,
       type: "POST",
-      timeout: 30000, // Only 30 seconds - we just start the process
+      timeout: 600000, // 10 minutes timeout
       data: {
         action: "ai_verify_process_factcheck",
         nonce: aiVerifyFactcheck.nonce,
         report_id: currentReportId,
       },
       success: function (response) {
-        if (response.success && response.data.status === "processing") {
-          // Process started successfully - now poll for status
-          pollProcessingStatus(showPaywall);
+        if (response.success) {
+          updateLoadingStep("Processing complete!", 100);
+          setTimeout(() => loadReport(showPaywall), 500);
         } else {
           updateLoadingStep(
-            "Error: " + (response.data.message || "Failed to start processing"),
+            "Error: " + (response.data.message || "Processing failed"),
             0
           );
         }
       },
-      error: function () {
-        updateLoadingStep("Connection error - failed to start", 0);
+      error: function (xhr, status, error) {
+        console.error("AJAX Error:", status, error);
+        console.error("Response:", xhr.responseText);
+        updateLoadingStep("Connection error: " + error, 0);
       },
     });
-  }
-
-  function pollProcessingStatus(showPaywall) {
-    const pollInterval = setInterval(function () {
-      $.ajax({
-        url: aiVerifyFactcheck.ajax_url,
-        type: "POST",
-        timeout: 10000, // Short timeout for status checks
-        data: {
-          action: "ai_verify_check_status",
-          nonce: aiVerifyFactcheck.nonce,
-          report_id: currentReportId,
-        },
-        success: function (response) {
-          if (response.success) {
-            const status = response.data.status;
-            const progress = response.data.progress || 0;
-            const message = response.data.progress_message || "Processing...";
-
-            updateLoadingStep(message, progress);
-
-            if (status === "completed") {
-              clearInterval(pollInterval);
-              updateLoadingStep("Processing complete!", 100);
-              setTimeout(() => loadReport(showPaywall), 500);
-            } else if (status === "failed") {
-              clearInterval(pollInterval);
-              updateLoadingStep("Processing failed", 0);
-            }
-            // If status is 'processing', keep polling
-          }
-        },
-        error: function () {
-          // Don't stop polling on single error - might be temporary
-          console.log("Status check failed, retrying...");
-        },
-      });
-    }, 3000); // Poll every 3 seconds
-
-    // Failsafe: stop polling after 5 minutes
-    setTimeout(function () {
-      clearInterval(pollInterval);
-      updateLoadingStep("Process took too long - please check back later", 0);
-    }, 300000); // 5 minutes
   }
 
   function loadReport(showPaywall) {
