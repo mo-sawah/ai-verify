@@ -81,41 +81,45 @@ class AI_Verify_Factcheck_Ajax {
      * Handle email submission and grant access
      */
     public static function handle_email_submission() {
-        // Verify nonce
+        // Verify the security nonce
         if (!check_ajax_referer('ai_verify_factcheck_nonce', 'nonce', false)) {
-            wp_send_json_error(array('message' => 'Security check failed'));
+            wp_send_json_error(array('message' => 'Security check failed. Please refresh and try again.'));
+            return;
         }
         
+        // Sanitize all inputs
         $report_id = sanitize_text_field($_POST['report_id'] ?? '');
         $email = sanitize_email($_POST['email'] ?? '');
         $name = sanitize_text_field($_POST['name'] ?? '');
-        $plan = sanitize_text_field($_POST['plan'] ?? 'free');
         
-        if (empty($report_id) || empty($email) || empty($name)) {
-            wp_send_json_error(array('message' => 'Missing required fields'));
+        // Validate inputs
+        if (empty($report_id) || !is_email($email) || empty($name)) {
+            wp_send_json_error(array('message' => 'Please provide a valid name and email address.'));
+            return;
         }
         
-        // Get user IP
+        // Get user IP for internal records
         $user_ip = self::get_user_ip();
         
-        // Grant access in database (for lead tracking)
-        $access_granted = self::grant_report_access($report_id, $email, $name, $user_ip, $plan);
+        // Grant access in the database (for lead tracking and record-keeping)
+        $access_granted = self::grant_report_access($report_id, $email, $name, $user_ip, 'free');
         
         if ($access_granted) {
-            // Update the main report with user info
+            // This function updates the main report row with the user's email and name
             AI_Verify_Factcheck_Database::update_user_info($report_id, $email, $name);
             
             error_log("AI Verify: Access granted for report $report_id to $email");
             
-            // Send success response. The JS will handle setting the cookie.
+            // Send a success response. The JavaScript will handle setting the cookie and revealing the content.
             wp_send_json_success(array(
-                'message' => 'Access granted',
+                'message' => 'Thank you! Access has been granted.',
                 'report_id' => $report_id
             ));
         } else {
-            wp_send_json_error(array('message' => 'Failed to record access'));
+            wp_send_json_error(array('message' => 'Could not save your information. Please contact support.'));
         }
     }
+
     
     /**
      * Grant access to a report
