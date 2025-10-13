@@ -119,8 +119,7 @@ class AI_Verify_Factcheck_Analyzer {
     
     /**
      * OPTIMIZED: Check claim with Perplexity AI (NO redundant search)
-     * 
-     * Perplexity's sonar models have BUILT-IN web search, so we don't need
+     * * Perplexity's sonar models have BUILT-IN web search, so we don't need
      * to call Firecrawl separately. Just call Perplexity directly.
      */
     private static function check_with_perplexity_optimized($claim, $context) {
@@ -169,11 +168,10 @@ IMPORTANT:
                     array('role' => 'user', 'content' => $prompt)
                 ),
                 'temperature' => 0.2,
-                'max_tokens' => 2000,
-                'return_citations' => true, // Get citation metadata
-                'return_images' => false
+                'max_tokens' => 2000
+                // **FIX:** REMOVED 'return_citations' and 'return_images' parameters which caused the 400 error.
             )),
-            'timeout' => 90
+            'timeout' => 300
         ));
         
         if (is_wp_error($response)) {
@@ -185,28 +183,31 @@ IMPORTANT:
         $body = wp_remote_retrieve_body($response);
         
         if ($status_code !== 200) {
-            error_log('AI Verify: Perplexity failed - Status ' . $status_code);
+            // More detailed error logging
+            error_log('AI Verify: Perplexity failed - Status ' . $status_code . ' | Response: ' . $body);
             return self::check_with_openrouter_optimized($claim, $context);
         }
         
         $data = json_decode($body, true);
         $content = $data['choices'][0]['message']['content'] ?? '';
         
-        // Perplexity returns citations in metadata - extract them
-        $citations = $data['citations'] ?? array();
-        
         $result = self::parse_fact_check_response($content);
         
-        // Add Perplexity citations if not already in sources
-        if (!empty($citations) && empty($result['sources'])) {
-            $result['sources'] = array_map(function($url) {
-                return array(
-                    'name' => parse_url($url, PHP_URL_HOST) ?: 'Web Source',
-                    'url' => $url
-                );
-            }, array_slice($citations, 0, 5));
+        // Manually find sources from the explanation text if possible, as citations metadata is not available this way
+        if (empty($result['sources'])) {
+            $found_sources = [];
+            preg_match_all('/https?:\/\/[^\s)]+/', $result['explanation'], $matches);
+            if (!empty($matches[0])) {
+                foreach (array_slice(array_unique($matches[0]), 0, 5) as $url) {
+                    $found_sources[] = [
+                        'name' => parse_url($url, PHP_URL_HOST) ?: 'Web Source',
+                        'url' => $url
+                    ];
+                }
+            }
+            $result['sources'] = $found_sources;
         }
-        
+
         return $result;
     }
     
@@ -300,7 +301,7 @@ CRITICAL INSTRUCTIONS:
                 'temperature' => 0.2,
                 'max_tokens' => 2000
             )),
-            'timeout' => 90
+            'timeout' => 300
         ));
         
         if (is_wp_error($response)) {
@@ -368,7 +369,7 @@ CRITICAL INSTRUCTIONS:
                 'include_domains' => array(), // Can whitelist trusted domains
                 'exclude_domains' => array() // Can blacklist unreliable sources
             )),
-            'timeout' => 30
+            'timeout' => 300
         ));
         
         if (is_wp_error($response)) {
@@ -411,7 +412,7 @@ CRITICAL INSTRUCTIONS:
         
         $response = wp_remote_post('https://api.firecrawl.dev/v1/search', array(
             'method'  => 'POST',
-            'timeout' => 60,
+            'timeout' => 300,
             'headers' => array(
                 'Content-Type'  => 'application/json',
                 'Authorization' => 'Bearer ' . $api_key,
@@ -682,17 +683,27 @@ CRITICAL INSTRUCTIONS:
             $response = wp_remote_post('https://idir.uta.edu/claimbuster/api/v2/score/text', array(
                 'headers' => array('Content-Type' => 'application/json'),
                 'body' => json_encode(array('text' => $text)),
-                'timeout' => 30
+                'timeout' => 300
             ));
             
             if (is_wp_error($response)) {
-                error_log('AI Verify: ClaimBuster error: ' . $response->get_error_message());
-                continue;
+                // IMPROVED LOGGING
+                error_log('AI Verify: ClaimBuster API connection error: ' . $response->get_error_message());
+                continue; // Try next batch or fail
+            }
+
+            $status_code = wp_remote_retrieve_response_code($response);
+            $body = wp_remote_retrieve_body($response);
+            
+            if ($status_code !== 200) {
+                // IMPROVED LOGGING
+                error_log('AI Verify: ClaimBuster API returned non-200 status: ' . $status_code . ' | Body: ' . $body);
+                continue; // Try next batch or fail
             }
             
-            $data = json_decode(wp_remote_retrieve_body($response), true);
+            $data = json_decode($body, true);
             
-            if (isset($data['results'])) {
+            if (isset($data['results']) && is_array($data['results'])) {
                 foreach ($data['results'] as $result) {
                     if ($result['score'] > 0.5) {
                         $all_claims[] = array(
@@ -703,6 +714,8 @@ CRITICAL INSTRUCTIONS:
                         );
                     }
                 }
+            } else {
+                 error_log('AI Verify: ClaimBuster response did not contain valid results. Body: ' . $body);
             }
         }
         
@@ -744,7 +757,7 @@ Article: {$content}";
                 'temperature' => 0.3,
                 'max_tokens' => 2000
             )),
-            'timeout' => 60
+            'timeout' => 300
         ));
         
         if (is_wp_error($response)) {
