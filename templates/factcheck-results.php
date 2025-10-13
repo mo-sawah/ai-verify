@@ -194,6 +194,27 @@ if (!defined('ABSPATH')) {
                         <p>Calculated overall score based on verified evidence</p>
                     </div>
                 </div>
+                <div class="method-step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <h4>Top Fact Check APIs</h4>
+                        <p>Identified and integrated leading fact-checking APIs for enhanced verification</p>
+                    </div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">7</div>
+                    <div class="step-content">
+                        <h4>AI Enhanced</h4>
+                        <p>Leveraged AI technologies to improve fact-checking accuracy and efficiency</p>
+                    </div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">8</div>
+                    <div class="step-content">
+                        <h4>Double Checking</h4>
+                        <p>Implemented a secondary review process using Google to ensure accuracy</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
