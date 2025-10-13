@@ -871,4 +871,6 @@ let currentReportId = null;
       return map[m];
     });
   }
+
+  window.startProcessing = startProcessing;
 })(jQuery);
