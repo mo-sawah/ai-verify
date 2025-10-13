@@ -342,7 +342,7 @@ CRITICAL INSTRUCTIONS:
     /**
      * Search web using Tavily API (RECOMMENDED for AI fact-checking)
      */
-    public static function search_web_tavily($query) {
+    private static function search_web_tavily($query) {
         $api_key = get_option('ai_verify_tavily_key');
         
         if (empty($api_key)) {
@@ -397,7 +397,7 @@ CRITICAL INSTRUCTIONS:
     /**
      * Search web using Firecrawl Search API (fallback)
      */
-    public static function search_web_firecrawl($query) {
+    private static function search_web_firecrawl($query) {
         $api_key = get_option('ai_verify_firecrawl_key');
         
         if (empty($api_key)) {
@@ -501,7 +501,7 @@ CRITICAL INSTRUCTIONS:
     /**
      * Check Google Fact Check API
      */
-    public static function check_google_factcheck($claim, $api_key) {
+    private static function check_google_factcheck($claim, $api_key) {
         $keywords = self::extract_keywords($claim);
         $query = implode(' ', array_slice($keywords, 0, 5));
         
