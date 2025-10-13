@@ -330,10 +330,16 @@ class AI_Verify_Factcheck_Ajax {
                 if (is_wp_error($result_data)) {
                     throw new Exception($result_data->get_error_message());
                 }
-                
-                // Step D: Extract and save the data (same as before)
-                $factcheck_results = $result_data['factcheck_results'] ?? array();
-                $overall_score = $result_data['overall_score'] ?? 50;
+
+                // **NEW SANITY CHECK: Ensure the AI returned a valid report structure**
+                if (empty($result_data) || !is_array($result_data) || !isset($result_data['factcheck_results']) || !is_array($result_data['factcheck_results'])) {
+                    error_log("AI Verify: Validation failed. AI result was not a valid report structure. Data received: " . print_r($result_data, true));
+                    throw new Exception('AI failed to generate a valid report. The response was empty or malformed.');
+                }
+
+                // Step D: Extract and save the data (now we know it's valid)
+                $factcheck_results = $result_data['factcheck_results']; // No need for null coalesce anymore
+                $overall_score = $result_data['overall_score'] ?? 50; // Keep default for score/rating
                 $credibility_rating = $result_data['credibility_rating'] ?? 'Mixed Credibility';
                 $propaganda = $result_data['propaganda_techniques'] ?? array();
                 

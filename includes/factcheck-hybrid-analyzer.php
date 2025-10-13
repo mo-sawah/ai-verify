@@ -51,7 +51,7 @@ class AI_Verify_Factcheck_Hybrid_Analyzer {
         4.  Calculate an overall credibility score (0-100) based on the accuracy and verifiability of the claims.
         5.  Determine a final credibility rating ('Highly Credible', 'Mostly Credible', 'Mixed Credibility', 'Low Credibility', 'Not Credible').
         6.  Identify any propaganda techniques or logical fallacies present.
-        7.  Ensure the final output is ONLY the JSON object, with no other text before or after it.";
+        7.  Ensure the final output is ONLY the JSON object, with no other text, markdown formatting, or explanations before or after it.";
 
         $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
             'headers' => array('Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json'),
@@ -74,12 +74,21 @@ class AI_Verify_Factcheck_Hybrid_Analyzer {
 
         $body = wp_remote_retrieve_body($response);
         preg_match('/\{.*\}/s', $body, $matches);
+
+        // **IMPROVED VALIDATION AND LOGGING**
         if (empty($matches[0])) {
-            error_log('AI Verify (Hybrid): Perplexity single-call failed to return valid JSON. Body: ' . $body);
-            return new WP_Error('json_error', 'AI failed to produce a valid JSON report.');
+            // Log the entire raw response for debugging
+            error_log('AI Verify (Hybrid): Perplexity single-call FAILED to find a JSON object. Raw response body: ' . $body);
+            return new WP_Error('json_extraction_failed', 'AI response did not contain a JSON object.');
         }
 
-        return json_decode($matches[0], true);
+        $result = json_decode($matches[0], true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('AI Verify (Hybrid): Perplexity single-call FAILED to parse JSON. JSON content: ' . $matches[0]);
+            return new WP_Error('json_decode_failed', 'AI response contained invalid JSON.');
+        }
+
+        return $result;
     }
 
     /**
@@ -146,11 +155,19 @@ class AI_Verify_Factcheck_Hybrid_Analyzer {
 
         $body = wp_remote_retrieve_body($response);
         preg_match('/\{.*\}/s', $body, $matches);
+
+        // **IMPROVED VALIDATION AND LOGGING**
         if (empty($matches[0])) {
-            error_log('AI Verify (Hybrid): OpenRouter single-call failed to return valid JSON. Body: ' . $body);
-            return new WP_Error('json_error', 'AI failed to produce a valid JSON report.');
+            error_log('AI Verify (Hybrid): OpenRouter single-call FAILED to find a JSON object. Raw response body: ' . $body);
+            return new WP_Error('json_extraction_failed', 'AI response did not contain a JSON object.');
         }
 
-        return json_decode($matches[0], true);
+        $result = json_decode($matches[0], true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('AI Verify (Hybrid): OpenRouter single-call FAILED to parse JSON. JSON content: ' . $matches[0]);
+            return new WP_Error('json_decode_failed', 'AI response contained invalid JSON.');
+        }
+
+        return $result;
     }
 }
