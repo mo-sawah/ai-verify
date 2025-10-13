@@ -1973,3 +1973,303 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ========================================
+   PROPAGANDA WARNING
+   ======================================== */
+
+.propaganda-warning {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border: 2px solid #ef4444;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 32px;
+}
+
+.s-dark .propaganda-warning {
+  background: linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.2) 0%,
+    rgba(220, 38, 38, 0.3) 100%
+  );
+  border-color: #dc2626;
+}
+
+.warning-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.warning-header svg {
+  color: #dc2626;
+  flex-shrink: 0;
+}
+
+.warning-header h3 {
+  color: #991b1b;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.s-dark .warning-header h3 {
+  color: #fca5a5;
+}
+
+.propaganda-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.propaganda-list li {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  color: #7f1d1d;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.s-dark .propaganda-list li {
+  background: rgba(0, 0, 0, 0.3);
+  color: #fca5a5;
+}
+
+.propaganda-list li::before {
+  content: "⚠️";
+  font-size: 16px;
+}
+
+/* ========================================
+   CLAIMS FILTER
+   ======================================== */
+
+.section-header-with-filter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.claims-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  padding: 6px 14px;
+  background: #f3f4f6;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #4b5563;
+}
+
+.filter-chip:hover {
+  background: #e5e7eb;
+}
+
+.filter-chip.active {
+  background: #acd2bf;
+  color: white;
+  border-color: #8fc4a8;
+}
+
+.s-dark .filter-chip {
+  background: #374151;
+  color: #d1d5db;
+}
+
+.s-dark .filter-chip:hover {
+  background: #4b5563;
+}
+
+.s-dark .filter-chip.active {
+  background: #acd2bf;
+  color: #1a202c;
+}
+
+/* ========================================
+   ENHANCED CLAIM CARDS
+   ======================================== */
+
+.claim-card {
+  position: relative;
+}
+
+.claim-card.hidden {
+  display: none;
+}
+
+.claim-method {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(172, 210, 191, 0.15);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  text-transform: uppercase;
+}
+
+.s-dark .claim-method {
+  background: rgba(172, 210, 191, 0.2);
+  color: #6ee7b7;
+}
+
+.claim-confidence {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.claim-evidence {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(172, 210, 191, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.s-dark .claim-evidence {
+  background: rgba(172, 210, 191, 0.15);
+}
+
+.evidence-section {
+  margin-bottom: 12px;
+}
+
+.evidence-section:last-child {
+  margin-bottom: 0;
+}
+
+.evidence-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #374151;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.s-dark .evidence-title {
+  color: #d1d5db;
+}
+
+.evidence-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.evidence-list li {
+  padding: 4px 0 4px 16px;
+  position: relative;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.s-dark .evidence-list li {
+  color: #9ca3af;
+}
+
+.evidence-list li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #acd2bf;
+  font-weight: bold;
+}
+
+.red-flags-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid #ef4444;
+  border-radius: 6px;
+}
+
+.s-dark .red-flags-section {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.red-flags-title {
+  font-weight: 700;
+  color: #dc2626;
+  font-size: 13px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.s-dark .red-flags-title {
+  color: #fca5a5;
+}
+
+.red-flags-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.red-flags-list li {
+  padding: 4px 0 4px 16px;
+  position: relative;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.s-dark .red-flags-list li {
+  color: #fca5a5;
+}
+
+.red-flags-list li::before {
+  content: "⚠";
+  position: absolute;
+  left: 0;
+}
+
+/* ========================================
+   LOADING PROGRESS UPDATES
+   ======================================== */
+
+.loading-step {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* ========================================
+   RESPONSIVE UPDATES
+   ======================================== */
+
+@media (max-width: 768px) {
+  .section-header-with-filter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .claims-filter {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .filter-chip {
+    flex: 0 0 auto;
+  }
+}

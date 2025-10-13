@@ -392,7 +392,7 @@ let currentReportId = null;
 })(jQuery);
 
 (function ($) {
-  "use strict";
+  ("use strict");
 
   let currentInputType = "auto";
 
@@ -642,7 +642,7 @@ let currentReportId = null;
   }
 
   /**
-   * Display report data
+   * Display report data (UPDATED)
    */
   function displayReport(report) {
     // Hide loading, show report
@@ -670,6 +670,11 @@ let currentReportId = null;
     $("#sourcesCount").text(sources.length);
     displaySources(sources);
 
+    // Analysis method
+    if (claims.length > 0) {
+      $("#analysisMethod").text(claims[0].method || "Multiple Sources");
+    }
+
     // Analysis time
     if (report.created_at && report.completed_at) {
       const start = new Date(report.created_at);
@@ -677,6 +682,30 @@ let currentReportId = null;
       const diff = Math.round((end - start) / 1000);
       $("#analysisTime").text(diff + "s");
     }
+
+    // Propaganda warning
+    const propaganda = report.metadata?.propaganda_techniques || [];
+    if (propaganda.length > 0) {
+      displayPropaganda(propaganda);
+    }
+
+    // Setup filter buttons
+    setupClaimsFilter();
+  }
+
+  /**
+   * Display propaganda techniques
+   */
+  function displayPropaganda(techniques) {
+    const $warning = $("#propagandaWarning");
+    const $list = $("#propagandaList");
+
+    $list.empty();
+    techniques.forEach(function (technique) {
+      $list.append("<li>" + escapeHtml(technique) + "</li>");
+    });
+
+    $warning.fadeIn(300);
   }
 
   /**
@@ -705,7 +734,7 @@ let currentReportId = null;
   }
 
   /**
-   * Display claims
+   * Display claims (UPDATED - Shows ALL claims with filters)
    */
   function displayClaims(claims) {
     const $container = $("#claimsAnalysis");
@@ -719,26 +748,142 @@ let currentReportId = null;
     claims.forEach(function (claim, index) {
       const ratingClass = getRatingClass(claim.rating);
       const confidencePercent = Math.round((claim.confidence || 0.5) * 100);
+      const filterType = getFilterType(claim.rating);
 
-      const $claim = $('<div class="claim-card">').html(`
-        <div class="claim-header">
-          <span class="claim-number">#${index + 1}</span>
-          <span class="claim-rating ${ratingClass}">${escapeHtml(
+      const $claim = $('<div class="claim-card">').attr(
+        "data-filter-type",
+        filterType
+      ).html(`
+            <div class="claim-header">
+                <span class="claim-number">#${index + 1}</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="claim-rating ${ratingClass}">${escapeHtml(
         claim.rating || "Unknown"
       )}</span>
-        </div>
-        <div class="claim-text">${escapeHtml(claim.claim)}</div>
-        <div class="claim-explanation">${escapeHtml(
-          claim.explanation || "No explanation available"
-        )}</div>
-        <div class="claim-meta">
-          <span class="claim-type">${escapeHtml(claim.type || "general")}</span>
-          <span class="claim-confidence">Confidence: ${confidencePercent}%</span>
-        </div>
-      `);
+                    <span class="claim-confidence">${confidencePercent}%</span>
+                </div>
+            </div>
+            <div class="claim-text">${escapeHtml(claim.claim)}</div>
+            <div class="claim-explanation">${escapeHtml(
+              claim.explanation || "No explanation available"
+            )}</div>
+            
+            ${
+              claim.evidence_for && claim.evidence_for.length > 0
+                ? `
+                <div class="claim-evidence">
+                    <div class="evidence-section">
+                        <div class="evidence-title">✓ Evidence Supporting:</div>
+                        <ul class="evidence-list">
+                            ${claim.evidence_for
+                              .map((e) => "<li>" + escapeHtml(e) + "</li>")
+                              .join("")}
+                        </ul>
+                    </div>
+                </div>
+            `
+                : ""
+            }
+            
+            ${
+              claim.evidence_against && claim.evidence_against.length > 0
+                ? `
+                <div class="claim-evidence">
+                    <div class="evidence-section">
+                        <div class="evidence-title">✗ Evidence Contradicting:</div>
+                        <ul class="evidence-list">
+                            ${claim.evidence_against
+                              .map((e) => "<li>" + escapeHtml(e) + "</li>")
+                              .join("")}
+                        </ul>
+                    </div>
+                </div>
+            `
+                : ""
+            }
+            
+            ${
+              claim.red_flags && claim.red_flags.length > 0
+                ? `
+                <div class="red-flags-section">
+                    <div class="red-flags-title">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                        Red Flags Detected
+                    </div>
+                    <ul class="red-flags-list">
+                        ${claim.red_flags
+                          .map((flag) => "<li>" + escapeHtml(flag) + "</li>")
+                          .join("")}
+                    </ul>
+                </div>
+            `
+                : ""
+            }
+            
+            <div class="claim-meta">
+                <span class="claim-type">${escapeHtml(
+                  claim.type || "general"
+                )}</span>
+                ${
+                  claim.method
+                    ? '<span class="claim-method">📡 ' +
+                      escapeHtml(claim.method) +
+                      "</span>"
+                    : ""
+                }
+            </div>
+        `);
 
       $container.append($claim);
     });
+  }
+
+  /**
+   * Setup claims filter buttons
+   */
+  function setupClaimsFilter() {
+    $(".filter-chip").on("click", function () {
+      const filter = $(this).data("filter");
+
+      // Update active state
+      $(".filter-chip").removeClass("active");
+      $(this).addClass("active");
+
+      // Filter claims
+      if (filter === "all") {
+        $(".claim-card").removeClass("hidden");
+      } else {
+        $(".claim-card").each(function () {
+          const $card = $(this);
+          const cardFilter = $card.data("filter-type");
+
+          if (cardFilter === filter) {
+            $card.removeClass("hidden");
+          } else {
+            $card.addClass("hidden");
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Get filter type from rating
+   */
+  function getFilterType(rating) {
+    const r = (rating || "").toLowerCase();
+
+    if (r.includes("true") && !r.includes("false")) {
+      return "true";
+    } else if (r.includes("false")) {
+      return "false";
+    } else if (r.includes("misleading") || r.includes("mixture")) {
+      return "misleading";
+    } else {
+      return "unverified";
+    }
   }
 
   /**

@@ -144,12 +144,17 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * Save fact-check results
+     * Save fact-check results (updated with propaganda)
      */
-    public static function save_results($report_id, $results, $score, $rating, $sources) {
+    public static function save_results($report_id, $results, $score, $rating, $sources, $propaganda = array()) {
         global $wpdb;
         
         $table_name = $wpdb->prefix . self::$table_name;
+        
+        $metadata = array(
+            'propaganda_techniques' => $propaganda,
+            'analysis_version' => '2.0'
+        );
         
         $wpdb->update(
             $table_name,
@@ -158,6 +163,7 @@ class AI_Verify_Factcheck_Database {
                 'overall_score' => floatval($score),
                 'credibility_rating' => sanitize_text_field($rating),
                 'sources' => json_encode($sources),
+                'metadata' => json_encode($metadata),
                 'status' => 'completed',
                 'completed_at' => current_time('mysql')
             ),
@@ -166,7 +172,7 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * Get report by ID
+     * Get report by ID (updated to include metadata)
      */
     public static function get_report($report_id) {
         global $wpdb;
@@ -188,6 +194,9 @@ class AI_Verify_Factcheck_Database {
             }
             if (!empty($report['sources'])) {
                 $report['sources'] = json_decode($report['sources'], true);
+            }
+            if (!empty($report['metadata'])) {
+                $report['metadata'] = json_decode($report['metadata'], true);
             }
         }
         

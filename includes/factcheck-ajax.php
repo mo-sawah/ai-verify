@@ -94,7 +94,7 @@ class AI_Verify_Factcheck_Ajax {
     }
     
     /**
-     * Process fact-check (main processing)
+     * Process fact-check (main processing with propaganda detection)
      */
     public static function process_factcheck() {
         check_ajax_referer('ai_verify_factcheck_nonce', 'nonce');
@@ -132,9 +132,9 @@ class AI_Verify_Factcheck_Ajax {
                 $search_result = AI_Verify_Factcheck_Scraper::search_phrase($input_value);
                 
                 if ($search_result['source'] === 'google_factcheck' && !empty($search_result['results'])) {
-                    // Already has fact-checks, skip to results
+                    // Already has fact-checks
                     $factcheck_results = $search_result['results'];
-                    $score = 70; // Default score for existing fact-checks
+                    $score = 70;
                     $rating = 'See fact-checks below';
                     
                     AI_Verify_Factcheck_Database::save_results(
@@ -142,7 +142,8 @@ class AI_Verify_Factcheck_Ajax {
                         $factcheck_results,
                         $score,
                         $rating,
-                        array()
+                        array(),
+                        array() // empty propaganda
                     );
                     
                     wp_send_json_success(array(
@@ -156,19 +157,22 @@ class AI_Verify_Factcheck_Ajax {
                 $context = $input_value;
             }
             
-            // Step 2: Extract claims
+            // Step 2: Detect propaganda techniques
+            $propaganda = AI_Verify_Factcheck_Analyzer::detect_propaganda($content);
+            
+            // Step 3: Extract claims
             $claims = AI_Verify_Factcheck_Analyzer::extract_claims($content);
             
             AI_Verify_Factcheck_Database::save_claims($report_id, $claims);
             
-            // Step 3: Fact-check claims
-            $factcheck_results = AI_Verify_Factcheck_Analyzer::factcheck_claims($claims, $context);
+            // Step 4: Fact-check claims
+            $factcheck_results = AI_Verify_Factcheck_Analyzer::factcheck_claims($claims, $context, $input_value);
             
-            // Step 4: Calculate overall score
+            // Step 5: Calculate overall score
             $overall_score = AI_Verify_Factcheck_Analyzer::calculate_overall_score($factcheck_results);
             $credibility_rating = AI_Verify_Factcheck_Analyzer::get_credibility_rating($overall_score);
             
-            // Step 5: Collect sources
+            // Step 6: Collect sources
             $sources = array();
             foreach ($factcheck_results as $result) {
                 if (!empty($result['sources'])) {
@@ -176,13 +180,25 @@ class AI_Verify_Factcheck_Ajax {
                 }
             }
             
-            // Step 6: Save results
+            // Remove duplicate sources
+            $unique_sources = array();
+            $seen = array();
+            foreach ($sources as $source) {
+                $key = $source['url'] ?? $source['name'];
+                if (!isset($seen[$key])) {
+                    $seen[$key] = true;
+                    $unique_sources[] = $source;
+                }
+            }
+            
+            // Step 7: Save results with propaganda detection
             AI_Verify_Factcheck_Database::save_results(
                 $report_id,
                 $factcheck_results,
                 $overall_score,
                 $credibility_rating,
-                $sources
+                $unique_sources,
+                $propaganda
             );
             
             wp_send_json_success(array(
