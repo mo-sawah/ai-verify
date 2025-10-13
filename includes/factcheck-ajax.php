@@ -71,19 +71,21 @@ class AI_Verify_Factcheck_Ajax {
     /**
      * Handle email submission and grant access
      */
-    public static function handle_email_submission() {
-        // Verify nonce
-        if (!check_ajax_referer('ai_verify_factcheck_nonce', 'nonce', false)) {
-            wp_send_json_error(array('message' => 'Security check failed'));
-        }
+    public static function handle_email_submission($report_id, $email, $name, $plan) { // Removed nonce check
+        // REMOVED: Redundant and incorrect reading from $_POST inside an internal function
+        // $report_id = sanitize_text_field($_POST['report_id'] ?? '');
+        // $email = sanitize_email($_POST['email'] ?? '');
+        // $name = sanitize_text_field($_POST['name'] ?? '');
+        // $plan = sanitize_text_field($_POST['plan'] ?? 'free');
         
-        $report_id = sanitize_text_field($_POST['report_id'] ?? '');
-        $email = sanitize_email($_POST['email'] ?? '');
-        $name = sanitize_text_field($_POST['name'] ?? '');
-        $plan = sanitize_text_field($_POST['plan'] ?? 'free');
+        // Sanitize the arguments passed to the internal function
+        $report_id = sanitize_text_field($report_id);
+        $email = sanitize_email($email);
+        $name = sanitize_text_field($name);
+        $plan = sanitize_text_field($plan ?? 'free'); // Ensure plan is sanitized too
         
         if (empty($report_id) || empty($email) || empty($name)) {
-            wp_send_json_error(array('message' => 'Missing required fields'));
+            return new WP_Error('missing_fields', 'Missing required fields');
         }
         
         // Get user IP
@@ -107,13 +109,9 @@ class AI_Verify_Factcheck_Ajax {
             );
             
             error_log("AI Verify: Access granted for report $report_id to $email");
-            
-            wp_send_json_success(array(
-                'message' => 'Access granted',
-                'report_id' => $report_id
-            ));
+            return true;
         } else {
-            wp_send_json_error(array('message' => 'Failed to grant access'));
+            return new WP_Error('access_fail', 'Failed to grant access');
         }
     }
     
@@ -313,8 +311,9 @@ class AI_Verify_Factcheck_Ajax {
         $report_id = sanitize_text_field($_POST['report_id']);
         $email = sanitize_email($_POST['email']);
         $name = sanitize_text_field($_POST['name']);
+        $plan = sanitize_text_field($_POST['plan'] ?? 'free'); // Added plan support
         $terms_accepted = isset($_POST['terms_accepted']) && $_POST['terms_accepted'] === 'true';
-        
+
         if (empty($email) || !is_email($email)) {
             wp_send_json_error(array('message' => 'Please provide a valid email'));
         }
@@ -326,15 +325,17 @@ class AI_Verify_Factcheck_Ajax {
         if (!$terms_accepted) {
             wp_send_json_error(array('message' => 'Please accept the terms of use'));
         }
+
+        // Use the internal handler to perform access logic
+        $result = self::handle_email_submission($report_id, $email, $name, $plan);
         
-        // Update report with user info
-        AI_Verify_Factcheck_Database::update_user_info($report_id, $email, $name);
-        
-        // Start processing
-        AI_Verify_Factcheck_Database::update_status($report_id, 'processing');
-        
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+        }
+
+        // SUCCESS: Access is now granted in DB. JS will handle client-side cookie and UI.
         wp_send_json_success(array(
-            'message' => 'Processing started',
+            'message' => 'Access granted',
             'report_id' => $report_id
         ));
     }

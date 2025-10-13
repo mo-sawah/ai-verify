@@ -238,7 +238,7 @@ if (!defined('ABSPATH')) {
     </div>
     
     <!-- Results Display (can be locked with .report-locked class) -->
-    <div class="factcheck-report" id="factcheckReport" style="display: none;">
+    <div class="factcheck-paywall-overlay" id="factcheckEmailGate"  style="display: none;">
         <!-- Report Header -->
         <div class="report-header">
             <div class="report-meta">

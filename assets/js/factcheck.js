@@ -212,15 +212,15 @@ let currentReportId = null;
 
       const $btn = $("#freePlanSubmit");
       $btn.prop("disabled", true).addClass("loading");
-      $(".btn-text").hide();
-      $(".btn-loading").show();
+      $btn.find(".btn-text").hide(); // Use .find() for nested elements
+      $btn.find(".btn-loading").show(); // Use .find() for nested elements
 
       // FIXED: Submit AJAX first, THEN set cookie on success
       $.ajax({
         url: aiVerifyFactcheck.ajax_url,
         type: "POST",
         data: {
-          action: "ai_verify_submit_email",
+          action: "ai_verify_submit_email", // This is the fixed AJAX endpoint
           nonce: aiVerifyFactcheck.nonce,
           report_id: currentReportId,
           email: email,
@@ -230,11 +230,12 @@ let currentReportId = null;
         },
         success: function (response) {
           if (response.success) {
-            // FIXED: Only set cookie after AJAX succeeds
+            // FIXED: Only set cookie after access is granted via AJAX
             UsageTracker.markReportCompleted(currentReportId);
             UsageTracker.incrementUsage();
+            UsageTracker.updateCounter(); // Update UI usage counter
 
-            // Hide paywall and show report
+            // Hide paywall and show report (Uses the ID added in the template fix)
             $("#factcheckEmailGate").fadeOut(300, function () {
               // Remove blur from report
               $("#factcheckReport").removeClass("report-blurred");
@@ -244,15 +245,17 @@ let currentReportId = null;
           } else {
             alert(response.data.message || "Failed to submit");
             $btn.prop("disabled", false).removeClass("loading");
-            $(".btn-text").show();
-            $(".btn-loading").hide();
+            $btn.find(".btn-text").show();
+            $btn.find(".btn-loading").hide();
           }
         },
-        error: function () {
-          alert("Connection error. Please try again.");
+        error: function (xhr, status, error) {
+          // Added arguments for better logging
+          console.error("Access Grant Error:", status, error);
+          alert("Connection error. Please try again. Status: " + status);
           $btn.prop("disabled", false).removeClass("loading");
-          $(".btn-text").show();
-          $(".btn-loading").hide();
+          $btn.find(".btn-text").show();
+          $btn.find(".btn-loading").hide();
         },
       });
     },
