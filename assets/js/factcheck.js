@@ -672,6 +672,10 @@ let currentReportId = null;
     initSearchInterface(".factcheck-header-search", true);
     initResultsPage();
     SubscriptionManager.init();
-    setInterval(UsageTracker.updateCounter, 5000);
+
+    // FIX: Wrap in function to preserve 'this' context
+    setInterval(function () {
+      UsageTracker.updateCounter();
+    }, 5000);
   });
 })(jQuery);
