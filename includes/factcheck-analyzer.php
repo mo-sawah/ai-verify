@@ -34,6 +34,70 @@ class AI_Verify_Factcheck_Analyzer {
         error_log('AI Verify: Extracted ' . count($claims) . ' claims');
         return array_slice($claims, 0, 15); // Max 15 claims
     }
+
+    /**
+     * Search web using Firecrawl Search API
+     */
+    private static function search_web_firecrawl($query) {
+        $api_key = get_option('ai_verify_firecrawl_key');
+        
+        if (empty($api_key)) {
+            error_log('AI Verify: Firecrawl API key not configured');
+            return array();
+        }
+        
+        error_log('AI Verify: Searching with Firecrawl: ' . $query);
+        
+        $response = wp_remote_post('https://api.firecrawl.dev/v1/search', array(
+            'method'  => 'POST',
+            'timeout' => 60,
+            'headers' => array(
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ),
+            'body' => json_encode(array(
+                'query' => $query,
+                'limit' => 5, // Get top 5 results
+                'lang' => 'en',
+                'format' => 'markdown'
+            )),
+        ));
+        
+        if (is_wp_error($response)) {
+            error_log('AI Verify: Firecrawl search error: ' . $response->get_error_message());
+            return array();
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        error_log('AI Verify: Firecrawl search response code: ' . $status_code);
+        
+        if ($status_code !== 200) {
+            error_log('AI Verify: Firecrawl search failed - Status ' . $status_code . ': ' . $body);
+            return array();
+        }
+        
+        $data = json_decode($body, true);
+        
+        if (!isset($data['data']) || !is_array($data['data'])) {
+            error_log('AI Verify: No Firecrawl search results');
+            return array();
+        }
+        
+        $results = array();
+        foreach ($data['data'] as $item) {
+            $results[] = array(
+                'title' => $item['title'] ?? '',
+                'url' => $item['url'] ?? '',
+                'content' => $item['markdown'] ?? ($item['content'] ?? '')
+            );
+        }
+        
+        error_log('AI Verify: Found ' . count($results) . ' Firecrawl search results');
+        
+        return $results;
+    }
     
     /**
      * Extract claims using ClaimBuster API (FREE and accurate)
@@ -232,101 +296,85 @@ Article: {$content}";
     }
     
     /**
- * Check claim with Perplexity AI (IMPROVED with logging)
- */
-private static function check_with_perplexity($claim, $context) {
-    $api_key = get_option('ai_verify_perplexity_key');
-    
-    if (empty($api_key)) {
-        error_log('AI Verify: Perplexity API key not configured');
-        return array(
-            'rating' => 'Unverified',
-            'explanation' => 'Perplexity API key not configured. Please add your API key in Settings.',
-            'sources' => array(),
-            'confidence' => 0.3
-        );
-    }
-    
-    error_log('AI Verify: Checking with Perplexity: ' . substr($claim, 0, 100));
-    
-    $prompt = "Fact-check this claim by searching the web. Be specific and provide evidence.
+     * Check claim with Perplexity AI + Firecrawl Search (ULTIMATE COMBO)
+     */
+    private static function check_with_perplexity($claim, $context) {
+        $api_key = get_option('ai_verify_perplexity_key');
+        
+        if (empty($api_key)) {
+            error_log('AI Verify: Perplexity API key not configured');
+            // Fallback to Firecrawl search + OpenRouter
+            return self::check_with_openrouter($claim, $context);
+        }
+        
+        error_log('AI Verify: Checking with Perplexity: ' . substr($claim, 0, 100));
+        
+        // Optional: Pre-search with Firecrawl for additional context
+        $firecrawl_results = self::search_web_firecrawl($claim);
+        $firecrawl_context = '';
+        
+        if (!empty($firecrawl_results)) {
+            $firecrawl_context = "\n\nAdditional web context:\n";
+            foreach ($firecrawl_results as $result) {
+                $firecrawl_context .= "- {$result['title']}: " . substr($result['content'], 0, 200) . "...\n";
+            }
+        }
+        
+        $prompt = "Fact-check this claim by searching the web thoroughly.
 
-Claim: {$claim}
+    Claim: {$claim}
+    Context: {$context}
+    {$firecrawl_context}
 
-Search the web and provide a JSON response:
-{
-    \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
-    \"explanation\": \"detailed explanation with evidence\",
-    \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
-    \"evidence_for\": [\"supporting evidence\"],
-    \"evidence_against\": [\"contradicting evidence\"],
-    \"red_flags\": [\"any propaganda techniques\"],
-    \"confidence\": 0.8
-}";
-    
-    $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
-        'headers' => array(
-            'Authorization' => 'Bearer ' . $api_key,
-            'Content-Type' => 'application/json'
-        ),
-        'body' => json_encode(array(
-            'model' => 'llama-3.1-sonar-large-128k-online',
-            'messages' => array(
-                array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON.'),
-                array('role' => 'user', 'content' => $prompt)
+    Provide a comprehensive fact-check in JSON:
+    {
+        \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unproven\",
+        \"explanation\": \"detailed explanation with evidence\",
+        \"sources\": [{\"name\": \"source\", \"url\": \"https://...\"}],
+        \"evidence_for\": [\"supporting evidence\"],
+        \"evidence_against\": [\"contradicting evidence\"],
+        \"red_flags\": [\"propaganda techniques\"],
+        \"confidence\": 0.8
+    }";
+        
+        $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
             ),
-            'temperature' => 0.2,
-            'max_tokens' => 2000
-        )),
-        'timeout' => 90
-    ));
-    
-    if (is_wp_error($response)) {
-        error_log('AI Verify: Perplexity API error: ' . $response->get_error_message());
-        return array(
-            'rating' => 'Unverified',
-            'explanation' => 'API connection error: ' . $response->get_error_message(),
-            'sources' => array(),
-            'confidence' => 0.3
-        );
+            'body' => json_encode(array(
+                'model' => 'llama-3.1-sonar-large-128k-online',
+                'messages' => array(
+                    array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON.'),
+                    array('role' => 'user', 'content' => $prompt)
+                ),
+                'temperature' => 0.2,
+                'max_tokens' => 2000
+            )),
+            'timeout' => 90
+        ));
+        
+        if (is_wp_error($response)) {
+            error_log('AI Verify: Perplexity error, falling back to OpenRouter + Firecrawl');
+            return self::check_with_openrouter($claim, $context);
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        if ($status_code !== 200) {
+            error_log('AI Verify: Perplexity failed - Status ' . $status_code);
+            return self::check_with_openrouter($claim, $context);
+        }
+        
+        $data = json_decode($body, true);
+        $content = $data['choices'][0]['message']['content'] ?? '';
+        
+        return self::parse_fact_check_response($content);
     }
-    
-    $status_code = wp_remote_retrieve_response_code($response);
-    $body = wp_remote_retrieve_body($response);
-    
-    error_log('AI Verify: Perplexity response code: ' . $status_code);
-    error_log('AI Verify: Perplexity response: ' . substr($body, 0, 500));
-    
-    if ($status_code !== 200) {
-        error_log('AI Verify: Perplexity API error - Status ' . $status_code . ': ' . $body);
-        return array(
-            'rating' => 'Unverified',
-            'explanation' => 'API error (Status ' . $status_code . '). Check your API key and credits.',
-            'sources' => array(),
-            'confidence' => 0.3
-        );
-    }
-    
-    $data = json_decode($body, true);
-    $content = $data['choices'][0]['message']['content'] ?? '';
-    
-    if (empty($content)) {
-        error_log('AI Verify: Empty response from Perplexity');
-        return array(
-            'rating' => 'Unverified',
-            'explanation' => 'Empty response from API',
-            'sources' => array(),
-            'confidence' => 0.3
-        );
-    }
-    
-    error_log('AI Verify: Perplexity content: ' . substr($content, 0, 300));
-    
-    return self::parse_fact_check_response($content);
-}
     
     /**
-     * Check claim with OpenRouter AI
+     * Check claim with OpenRouter AI + Firecrawl Search
      */
     private static function check_with_openrouter($claim, $context) {
         $api_key = get_option('ai_verify_openrouter_key');
@@ -337,30 +385,51 @@ Search the web and provide a JSON response:
         
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
         
-        $prompt = "You are a professional fact-checker. Search the web and verify this claim.
+        error_log('AI Verify: Checking with OpenRouter + Firecrawl Search: ' . substr($claim, 0, 100));
+        
+        // Step 1: Search the web using Firecrawl
+        $web_results = self::search_web_firecrawl($claim);
+        
+        if (empty($web_results)) {
+            error_log('AI Verify: No Firecrawl search results found');
+        }
+        
+        // Step 2: Build context from web results
+        $web_context = '';
+        if (!empty($web_results)) {
+            $web_context = "\n\nWeb Search Results:\n";
+            foreach ($web_results as $idx => $result) {
+                $content_preview = substr($result['content'], 0, 500);
+                $web_context .= "\n[Source " . ($idx + 1) . "]\n";
+                $web_context .= "Title: {$result['title']}\n";
+                $web_context .= "URL: {$result['url']}\n";
+                $web_context .= "Content: {$content_preview}...\n";
+            }
+        }
+        
+        // Step 3: Ask AI to analyze with web results
+        $prompt = "You are a professional fact-checker. Analyze this claim using the web search results provided.
 
-Claim: {$claim}
-Context: {$context}
+    Claim: {$claim}
+    Original Context: {$context}
+    {$web_context}
 
-IMPORTANT: You MUST search the web for current, authoritative sources.
+    Based on the web search results above, provide a detailed fact-check in JSON format:
+    {
+        \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unproven\",
+        \"explanation\": \"detailed explanation citing the sources\",
+        \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
+        \"evidence_for\": [\"evidence supporting the claim\"],
+        \"evidence_against\": [\"evidence contradicting the claim\"],
+        \"red_flags\": [\"any propaganda techniques or logical fallacies detected\"],
+        \"confidence\": 0.85
+    }
 
-Provide:
-1. Rating: True/False/Mostly True/Mostly False/Misleading/Unproven
-2. Detailed explanation
-3. Sources with URLs
-4. Evidence for and against
-5. Any propaganda techniques or red flags
-
-Return ONLY valid JSON:
-{
-    \"rating\": \"...\",
-    \"explanation\": \"...\",
-    \"sources\": [{\"name\": \"...\", \"url\": \"...\"}],
-    \"evidence_for\": [\"...\"],
-    \"evidence_against\": [\"...\"],
-    \"red_flags\": [\"...\"],
-    \"confidence\": 0.0-1.0
-}";
+    IMPORTANT: 
+    - Base your rating on the web search results provided
+    - Cite specific sources in your explanation
+    - If web results contradict the claim, rate it False
+    - Include propaganda techniques if detected";
         
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
@@ -372,7 +441,7 @@ Return ONLY valid JSON:
             'body' => json_encode(array(
                 'model' => $model,
                 'messages' => array(
-                    array('role' => 'system', 'content' => 'You are a fact-checker with web search.'),
+                    array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON with evidence-based ratings.'),
                     array('role' => 'user', 'content' => $prompt)
                 ),
                 'temperature' => 0.2,
@@ -382,13 +451,107 @@ Return ONLY valid JSON:
         ));
         
         if (is_wp_error($response)) {
-            return $response;
+            error_log('AI Verify: OpenRouter error: ' . $response->get_error_message());
+            return array(
+                'rating' => 'Unverified',
+                'explanation' => 'API connection error: ' . $response->get_error_message(),
+                'sources' => array(),
+                'confidence' => 0.3
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body_text = wp_remote_retrieve_body($response);
+        
+        error_log('AI Verify: OpenRouter response code: ' . $status_code);
+        
+        if ($status_code !== 200) {
+            error_log('AI Verify: OpenRouter API error - Status ' . $status_code);
+            return array(
+                'rating' => 'Unverified',
+                'explanation' => 'API error (Status ' . $status_code . '). Check your API key and credits.',
+                'sources' => array(),
+                'confidence' => 0.3
+            );
+        }
+        
+        $body = json_decode($body_text, true);
+        $content = $body['choices'][0]['message']['content'] ?? '';
+        
+        if (empty($content)) {
+            return array(
+                'rating' => 'Unverified',
+                'explanation' => 'Empty response from AI',
+                'sources' => array(),
+                'confidence' => 0.3
+            );
+        }
+        
+        error_log('AI Verify: OpenRouter response preview: ' . substr($content, 0, 200));
+        
+        $result = self::parse_fact_check_response($content);
+        
+        // Add Firecrawl sources if not included by AI
+        if (empty($result['sources']) && !empty($web_results)) {
+            $result['sources'] = array_map(function($r) {
+                return array('name' => $r['title'], 'url' => $r['url']);
+            }, array_slice($web_results, 0, 3));
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Search web using Tavily API
+     */
+    private static function search_web_tavily($query) {
+        $api_key = get_option('ai_verify_tavily_key');
+        
+        if (empty($api_key)) {
+            error_log('AI Verify: Tavily API key not configured');
+            return array();
+        }
+        
+        error_log('AI Verify: Searching web with Tavily: ' . $query);
+        
+        $response = wp_remote_post('https://api.tavily.com/search', array(
+            'headers' => array(
+                'Content-Type' => 'application/json'
+            ),
+            'body' => json_encode(array(
+                'api_key' => $api_key,
+                'query' => $query,
+                'search_depth' => 'advanced',
+                'include_answer' => true,
+                'max_results' => 5
+            )),
+            'timeout' => 30
+        ));
+        
+        if (is_wp_error($response)) {
+            error_log('AI Verify: Tavily error: ' . $response->get_error_message());
+            return array();
         }
         
         $body = json_decode(wp_remote_retrieve_body($response), true);
-        $content = $body['choices'][0]['message']['content'] ?? '';
         
-        return self::parse_fact_check_response($content);
+        if (!isset($body['results'])) {
+            error_log('AI Verify: No Tavily results');
+            return array();
+        }
+        
+        $results = array();
+        foreach ($body['results'] as $result) {
+            $results[] = array(
+                'title' => $result['title'] ?? '',
+                'url' => $result['url'] ?? '',
+                'content' => $result['content'] ?? ''
+            );
+        }
+        
+        error_log('AI Verify: Found ' . count($results) . ' web results');
+        
+        return $results;
     }
 
     /**
@@ -548,7 +711,7 @@ Return ONLY valid JSON:
     }
     
     /**
-     * Calculate overall credibility score (IMPROVED)
+     * Calculate overall credibility score (IMPROVED - Penalties for Unproven)
      */
     public static function calculate_overall_score($factcheck_results) {
         if (empty($factcheck_results)) {
@@ -557,45 +720,54 @@ Return ONLY valid JSON:
         
         $total_score = 0;
         $total_weight = 0;
-        $unverified_count = 0;
+        $unproven_count = 0;
+        $total_claims = count($factcheck_results);
         
         foreach ($factcheck_results as $result) {
             $rating = strtolower($result['rating'] ?? 'unknown');
             $confidence = floatval($result['confidence'] ?? 0.5);
             
             // Convert rating to score
-            $score = 0.5; // default for unknown/unverified
+            $score = 0.5; // default
             
             if (strpos($rating, 'true') !== false && strpos($rating, 'false') === false) {
                 $score = 1.0; // True
             } elseif (strpos($rating, 'mostly true') !== false) {
                 $score = 0.75; // Mostly True
             } elseif (strpos($rating, 'mixture') !== false || strpos($rating, 'misleading') !== false) {
-                $score = 0.4; // Misleading/Mixture
+                $score = 0.3; // Misleading
             } elseif (strpos($rating, 'mostly false') !== false) {
-                $score = 0.25; // Mostly False
+                $score = 0.15; // Mostly False
             } elseif (strpos($rating, 'false') !== false) {
                 $score = 0; // False
-            } elseif (strpos($rating, 'unverified') !== false || strpos($rating, 'unknown') !== false) {
-                $unverified_count++;
-                $score = 0.5; // Unverified
+            } elseif (strpos($rating, 'unproven') !== false || strpos($rating, 'unverified') !== false || strpos($rating, 'unknown') !== false) {
+                $unproven_count++;
+                // Unproven with HIGH confidence means we're CONFIDENT it's unproven
+                // This should LOWER the score significantly
+                if ($confidence > 0.8) {
+                    $score = 0.2; // High confidence it's unproven = very low score
+                } else {
+                    $score = 0.4; // Low confidence unproven = slightly better
+                }
             }
             
-            $weight = $confidence;
+            $weight = max($confidence, 0.3); // Minimum weight of 0.3
             $total_score += $score * $weight;
             $total_weight += $weight;
         }
         
         if ($total_weight == 0) {
-            return 50;
+            return 30; // Default low score if no data
         }
         
         $calculated_score = ($total_score / $total_weight) * 100;
         
-        // Penalty for too many unverified claims
-        if ($unverified_count > count($factcheck_results) * 0.7) {
-            // If more than 70% are unverified, cap the score
-            $calculated_score = min($calculated_score, 60);
+        // Heavy penalty if most claims are unproven
+        $unproven_ratio = $unproven_count / $total_claims;
+        if ($unproven_ratio > 0.5) {
+            // More than 50% unproven = significant penalty
+            $penalty = ($unproven_ratio - 0.5) * 40; // Up to 20% penalty
+            $calculated_score = max(20, $calculated_score - $penalty);
         }
         
         return round($calculated_score, 2);

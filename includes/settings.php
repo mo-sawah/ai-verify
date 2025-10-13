@@ -45,6 +45,7 @@ class AI_Verify_Settings {
         register_setting('ai_verify_settings', 'ai_verify_results_page_url');
         register_setting('ai_verify_settings', 'ai_verify_firecrawl_key');
         register_setting('ai_verify_settings', 'ai_verify_scraping_service');
+        register_setting('ai_verify_settings', 'ai_verify_tavily_key');
     }
     
     public static function render_settings_page() {
@@ -155,6 +156,14 @@ class AI_Verify_Settings {
                         <td>
                             <input type="text" name="ai_verify_perplexity_key" id="ai_verify_perplexity_key" value="<?php echo esc_attr($perplexity_key); ?>" class="regular-text">
                             <p class="description">Get your API key from <a href="https://www.perplexity.ai/settings/api" target="_blank">Perplexity.ai</a> (~$5 for 1000 searches)</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th scope="row"><label for="ai_verify_tavily_key">Tavily API Key (For OpenRouter Web Search)</label></th>
+                        <td>
+                            <input type="text" name="ai_verify_tavily_key" id="ai_verify_tavily_key" value="<?php echo esc_attr(get_option('ai_verify_tavily_key', '')); ?>" class="regular-text">
+                            <p class="description">Required if using OpenRouter. Get FREE key from <a href="https://tavily.com" target="_blank">Tavily.com</a> (1000 searches/month free)</p>
                         </td>
                     </tr>
                     

@@ -1788,6 +1788,7 @@
   gap: 16px;
   font-size: 13px;
   color: #a0aec0;
+  margin-top: 15px;
 }
 
 .claim-type {
@@ -2080,6 +2081,7 @@
 
 .filter-chip:hover {
   background: #e5e7eb;
+  color: #161616;
 }
 
 .filter-chip.active {

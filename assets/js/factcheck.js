@@ -229,11 +229,17 @@ let currentReportId = null;
       $(".btn-text").hide();
       $(".btn-loading").show();
 
-      // Increment usage
-      UsageTracker.incrementUsage();
+      // Mark this SPECIFIC report as completed (30 days cookie)
+      const reportCookieName = "ai_verify_report_" + currentReportId;
+      FactcheckCookies.set(reportCookieName, "completed", 30);
+      console.log("AI Verify: Set report cookie:", reportCookieName);
 
-      // Mark this report as completed (so email gate won't show again for this report)
-      UsageTracker.markReportCompleted(currentReportId);
+      // Increment usage counter
+      UsageTracker.incrementUsage();
+      console.log(
+        "AI Verify: Remaining uses:",
+        UsageTracker.getRemainingUses()
+      );
 
       // Submit via AJAX
       $.ajax({
@@ -572,7 +578,7 @@ let currentReportId = null;
   }
 
   /**
-   * Initialize results page (FIXED)
+   * Initialize results page (COMPLETELY FIXED)
    */
   function initResultsPage() {
     if ($("#factcheckResults").length === 0) {
@@ -590,10 +596,20 @@ let currentReportId = null;
 
     currentReportId = reportId;
 
-    // Check if report was already completed
-    if (UsageTracker.hasCompletedReport(reportId)) {
-      console.log("AI Verify: Report already completed, loading directly");
-      // Skip email gate and load report directly
+    console.log("AI Verify: Report ID:", reportId);
+
+    // Initialize usage tracking
+    UsageTracker.init();
+
+    // Check if this specific report was already completed
+    const reportCookieName = "ai_verify_report_" + reportId;
+    const reportCompleted = FactcheckCookies.get(reportCookieName);
+
+    console.log("AI Verify: Report completed cookie:", reportCompleted);
+
+    if (reportCompleted === "completed") {
+      console.log("AI Verify: Report already completed, skipping email gate");
+      // Skip email gate - go straight to processing
       setTimeout(function () {
         $("#factcheckLoading").fadeOut(300, function () {
           startProcessing();
@@ -602,7 +618,8 @@ let currentReportId = null;
       return;
     }
 
-    // Start processing flow
+    // Show email gate
+    console.log("AI Verify: Showing email gate");
     setTimeout(function () {
       $("#factcheckEmailGate").fadeIn(300);
       $("#factcheckLoading").fadeOut(300);
