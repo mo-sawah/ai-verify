@@ -1,7 +1,7 @@
 <?php
 /**
  * Professional Fact-Check Results Page Template
- * UPDATED: New paywall overlay structure
+ * UPDATED: Uses included template for access gate.
  */
 
 if (!defined('ABSPATH')) {
@@ -10,7 +10,13 @@ if (!defined('ABSPATH')) {
 ?>
 
 <div class="factcheck-results-wrapper" id="factcheckResults">
-    <?php include 'factcheck-email-gate.php'; ?>
+    <?php
+    // Correctly include the simple email gate template.
+    $gate_template = AI_VERIFY_PLUGIN_DIR . 'templates/factcheck-email-gate.php';
+    if (file_exists($gate_template)) {
+        include $gate_template;
+    }
+    ?>
 
     <div class="factcheck-loading" id="factcheckLoading">
         <div class="loading-spinner">
@@ -26,16 +32,14 @@ if (!defined('ABSPATH')) {
         </div>
     </div>
     
-    <!-- Results Display (can be locked with .report-locked class) -->
     <div class="factcheck-report" id="factcheckReport" style="display: none;">
-        <!-- Report Header -->
         <div class="report-header">
             <div class="report-meta">
                 <span class="report-id">Report ID: <strong id="reportId">-</strong></span>
                 <span class="report-date">Generated: <strong id="reportDate">-</strong></span>
             </div>
             
-            <?php if ($atts['show_export'] === 'yes'): ?>
+            <?php if (isset($atts['show_export']) && $atts['show_export'] === 'yes'): ?>
             <div class="report-actions">
                 <button class="export-btn" data-format="html">
                     <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,7 +63,6 @@ if (!defined('ABSPATH')) {
             <?php endif; ?>
         </div>
         
-        <!-- Overall Score Card -->
         <div class="report-score-card">
             <div class="score-visual">
                 <div class="score-circle">
@@ -107,7 +110,6 @@ if (!defined('ABSPATH')) {
             </div>
         </div>
 
-        <!-- Propaganda Warning -->
         <div class="propaganda-warning" id="propagandaWarning" style="display: none;">
             <div class="warning-header">
                 <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,7 +120,6 @@ if (!defined('ABSPATH')) {
             <ul id="propagandaList" class="propaganda-list"></ul>
         </div>
         
-        <!-- Claims Analysis -->
         <div class="report-section">
             <div class="section-header-with-filter">
                 <h3 class="section-title">
@@ -136,11 +137,9 @@ if (!defined('ABSPATH')) {
                 </div>
             </div>
             <div id="claimsAnalysis" class="claims-list">
-                <!-- Claims will be inserted here by JavaScript -->
-            </div>
+                </div>
         </div>
         
-        <!-- Sources -->
         <div class="report-section">
             <h3 class="section-title">
                 <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,11 +148,9 @@ if (!defined('ABSPATH')) {
                 Sources Consulted
             </h3>
             <div id="sourcesList" class="sources-list">
-                <!-- Sources will be inserted here -->
-            </div>
+                </div>
         </div>
         
-        <!-- Methodology -->
         <div class="report-section methodology">
             <h3 class="section-title">
                 <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">

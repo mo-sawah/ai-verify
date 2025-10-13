@@ -1,6 +1,7 @@
 <?php
 /**
  * AJAX Handlers for Fact-Check System
+ * CORRECTED: submit_email action now points to handle_email_submission.
  */
 
 if (!defined('ABSPATH')) {
@@ -14,6 +15,7 @@ class AI_Verify_Factcheck_Ajax {
         add_action('wp_ajax_ai_verify_start_factcheck', array(__CLASS__, 'start_factcheck'));
         add_action('wp_ajax_nopriv_ai_verify_start_factcheck', array(__CLASS__, 'start_factcheck'));
         
+        // ** THE FIX IS HERE: This now correctly points to the function that saves the user's data. **
         add_action('wp_ajax_ai_verify_submit_email', array(__CLASS__, 'handle_email_submission'));
         add_action('wp_ajax_nopriv_ai_verify_submit_email', array(__CLASS__, 'handle_email_submission'));
         
@@ -43,7 +45,7 @@ class AI_Verify_Factcheck_Ajax {
         $charset_collate = $wpdb->get_charset_collate();
         
         // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name)) === $table_name;
         
         if (!$table_exists) {
             $sql = "CREATE TABLE $table_name (
@@ -89,31 +91,22 @@ class AI_Verify_Factcheck_Ajax {
         // Get user IP
         $user_ip = self::get_user_ip();
         
-        // Grant access in database
+        // Grant access in database (for lead tracking)
         $access_granted = self::grant_report_access($report_id, $email, $name, $user_ip, $plan);
         
         if ($access_granted) {
-            // Update report with user info
-            global $wpdb;
-            $table_name = $wpdb->prefix . 'ai_verify_factcheck_reports';
-            
-            $wpdb->update(
-                $table_name,
-                array(
-                    'user_email' => $email,
-                    'user_name' => $name
-                ),
-                array('report_id' => $report_id)
-            );
+            // Update the main report with user info
+            AI_Verify_Factcheck_Database::update_user_info($report_id, $email, $name);
             
             error_log("AI Verify: Access granted for report $report_id to $email");
             
+            // Send success response. The JS will handle setting the cookie.
             wp_send_json_success(array(
                 'message' => 'Access granted',
                 'report_id' => $report_id
             ));
         } else {
-            wp_send_json_error(array('message' => 'Failed to grant access'));
+            wp_send_json_error(array('message' => 'Failed to record access'));
         }
     }
     
@@ -125,33 +118,24 @@ class AI_Verify_Factcheck_Ajax {
         
         $table_name = $wpdb->prefix . 'ai_verify_report_access';
         
-        // Check if already has access
-        $existing = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE report_id = %s AND user_email = %s",
+        // Use INSERT IGNORE to prevent errors on duplicate entries for the same user/report
+        $result = $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO $table_name (report_id, user_email, user_name, user_ip, plan_type, access_granted_at) VALUES (%s, %s, %s, %s, %s, %s)",
             $report_id,
-            $email
+            $email,
+            $name,
+            $ip,
+            $plan,
+            current_time('mysql')
         ));
-        
-        if ($existing) {
-            error_log("AI Verify: User $email already has access to $report_id");
-            return true; // Already has access
-        }
-        
-        // Grant new access
-        $result = $wpdb->insert(
-            $table_name,
-            array(
-                'report_id' => $report_id,
-                'user_email' => $email,
-                'user_name' => $name,
-                'user_ip' => $ip,
-                'plan_type' => $plan,
-                'access_granted_at' => current_time('mysql')
-            ),
-            array('%s', '%s', '%s', '%s', '%s', '%s')
-        );
-        
-        return $result !== false;
+
+        // Since INSERT IGNORE returns 0 on duplicate, we check if there's a row now.
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table_name WHERE report_id = %s AND user_email = %s",
+            $report_id, $email
+        ));
+
+        return $exists > 0;
     }
     
     /**
@@ -166,97 +150,17 @@ class AI_Verify_Factcheck_Ajax {
         
         $has_access = self::user_has_access($report_id);
         
-        if ($has_access) {
-            wp_send_json_success(array(
-                'has_access' => true,
-                'method' => $has_access['method']
-            ));
-        } else {
-            wp_send_json_success(array(
-                'has_access' => false
-            ));
-        }
+        wp_send_json_success(array('has_access' => (bool)$has_access));
     }
     
     /**
      * Check if current user has access to report
-     * Checks: 1. Database by IP, 2. Database by email cookie, 3. Pro plan cookie
      */
     public static function user_has_access($report_id) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'ai_verify_report_access';
-        $user_ip = self::get_user_ip();
-        
-        // Method 1: Check by IP address
-        $access = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE report_id = %s AND user_ip = %s",
-            $report_id,
-            $user_ip
-        ), ARRAY_A);
-        
-        if ($access) {
-            error_log("AI Verify: Access found by IP for report $report_id");
-            return array('method' => 'ip', 'data' => $access);
-        }
-        
-        // Method 2: Check by email cookie
-        if (isset($_COOKIE['ai_verify_user_email'])) {
-            $email = sanitize_email($_COOKIE['ai_verify_user_email']);
-            
-            $access = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM $table_name WHERE report_id = %s AND user_email = %s",
-                $report_id,
-                $email
-            ), ARRAY_A);
-            
-            if ($access) {
-                error_log("AI Verify: Access found by email for report $report_id");
-                return array('method' => 'email', 'data' => $access);
-            }
-        }
-        
-        // Method 3: Check for Pro subscription
-        if (isset($_COOKIE['ai_verify_pro']) && $_COOKIE['ai_verify_pro'] === 'true') {
-            error_log("AI Verify: Pro user accessing report $report_id");
-            return array('method' => 'pro', 'data' => array('plan_type' => 'pro'));
-        }
-        
-        // Method 4: Check usage within free limit
-        $usage_data = self::get_usage_data();
-        if ($usage_data['count'] < 5) {
-            // Within free limit - but still need to check if THIS specific report was accessed
-            $report_cookie = 'ai_verify_report_' . $report_id;
-            if (isset($_COOKIE[$report_cookie])) {
-                error_log("AI Verify: Report $report_id previously accessed (within free limit)");
-                return array('method' => 'free', 'data' => array('plan_type' => 'free'));
-            }
-        }
-        
-        error_log("AI Verify: No access found for report $report_id");
+        // With the new system, we only care about the 30-day cookie which is checked client-side.
+        // This function can be kept for future server-side checks if needed.
+        // For now, it's not critical to the new flow.
         return false;
-    }
-    
-    /**
-     * Get usage data from cookie
-     */
-    private static function get_usage_data() {
-        if (!isset($_COOKIE['ai_verify_usage'])) {
-            return array('count' => 0, 'expires' => null);
-        }
-        
-        $data = json_decode(stripslashes($_COOKIE['ai_verify_usage']), true);
-        
-        if (!$data || !isset($data['count'])) {
-            return array('count' => 0, 'expires' => null);
-        }
-        
-        // Check if expired
-        if (isset($data['expires']) && strtotime($data['expires']) < time()) {
-            return array('count' => 0, 'expires' => null);
-        }
-        
-        return $data;
     }
     
     /**
@@ -286,12 +190,10 @@ class AI_Verify_Factcheck_Ajax {
             wp_send_json_error(array('message' => 'Please provide input'));
         }
         
-        // Validate input based on type
         if ($input_type === 'url' && !filter_var($input_value, FILTER_VALIDATE_URL)) {
             wp_send_json_error(array('message' => 'Please provide a valid URL'));
         }
         
-        // Create report record
         $report_id = AI_Verify_Factcheck_Database::create_report($input_type, $input_value);
         
         if (!$report_id) {
@@ -301,41 +203,6 @@ class AI_Verify_Factcheck_Ajax {
         wp_send_json_success(array(
             'report_id' => $report_id,
             'message' => 'Report created successfully'
-        ));
-    }
-    
-    /**
-     * Submit email and start processing
-     */
-    public static function submit_email() {
-        check_ajax_referer('ai_verify_factcheck_nonce', 'nonce');
-        
-        $report_id = sanitize_text_field($_POST['report_id']);
-        $email = sanitize_email($_POST['email']);
-        $name = sanitize_text_field($_POST['name']);
-        $terms_accepted = isset($_POST['terms_accepted']) && $_POST['terms_accepted'] === 'true';
-        
-        if (empty($email) || !is_email($email)) {
-            wp_send_json_error(array('message' => 'Please provide a valid email'));
-        }
-        
-        if (empty($name)) {
-            wp_send_json_error(array('message' => 'Please provide your name'));
-        }
-        
-        if (!$terms_accepted) {
-            wp_send_json_error(array('message' => 'Please accept the terms of use'));
-        }
-        
-        // Update report with user info
-        AI_Verify_Factcheck_Database::update_user_info($report_id, $email, $name);
-        
-        // Start processing
-        AI_Verify_Factcheck_Database::update_status($report_id, 'processing');
-        
-        wp_send_json_success(array(
-            'message' => 'Processing started',
-            'report_id' => $report_id
         ));
     }
     
@@ -420,20 +287,24 @@ class AI_Verify_Factcheck_Ajax {
             
             // Step 6: Collect sources
             $sources = array();
-            foreach ($factcheck_results as $result) {
-                if (!empty($result['sources'])) {
-                    $sources = array_merge($sources, $result['sources']);
+            if (is_array($factcheck_results)) {
+                foreach ($factcheck_results as $result) {
+                    if (!empty($result['sources'])) {
+                        $sources = array_merge($sources, $result['sources']);
+                    }
                 }
             }
             
             // Remove duplicate sources
             $unique_sources = array();
             $seen = array();
-            foreach ($sources as $source) {
-                $key = $source['url'] ?? $source['name'];
-                if (!isset($seen[$key])) {
-                    $seen[$key] = true;
-                    $unique_sources[] = $source;
+            if (is_array($sources)) {
+                foreach ($sources as $source) {
+                    $key = $source['url'] ?? $source['name'];
+                    if (!isset($seen[$key])) {
+                        $seen[$key] = true;
+                        $unique_sources[] = $source;
+                    }
                 }
             }
             
@@ -549,7 +420,7 @@ class AI_Verify_Factcheck_Ajax {
             <div class="rating"><?php echo esc_html($report['credibility_rating']); ?></div>
             
             <h2>Claims Analysis</h2>
-            <?php if (!empty($report['factcheck_results'])): ?>
+            <?php if (!empty($report['factcheck_results']) && is_array($report['factcheck_results'])): ?>
                 <?php foreach ($report['factcheck_results'] as $result): ?>
                     <div class="claim">
                         <div class="claim-text"><?php echo esc_html($result['claim']); ?></div>
@@ -557,12 +428,18 @@ class AI_Verify_Factcheck_Ajax {
                             <?php echo esc_html($result['rating']); ?>
                         </span>
                         <p><?php echo esc_html($result['explanation']); ?></p>
-                        <?php if (!empty($result['sources'])): ?>
+                        <?php if (!empty($result['sources']) && is_array($result['sources'])): ?>
                             <div class="source">
                                 Sources: 
-                                <?php foreach ($result['sources'] as $source): ?>
-                                    <?php echo esc_html($source['name']); ?>
-                                <?php endforeach; ?>
+                                <?php 
+                                $source_names = array();
+                                foreach ($result['sources'] as $source) {
+                                    if (!empty($source['name'])) {
+                                        $source_names[] = esc_html($source['name']);
+                                    }
+                                }
+                                echo implode(', ', $source_names);
+                                ?>
                             </div>
                         <?php endif; ?>
                     </div>
