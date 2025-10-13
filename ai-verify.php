@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 1.2.12
+ * Version: 2.0.0
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '1.2.12');
+define('AI_VERIFY_VERSION', '2.0.0');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -73,9 +73,12 @@ class AI_Verify {
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-analyzer.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-analyzer.php';
         }
+        
+        // NEW: Load fact-check AJAX handler (database-backed access tracking)
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-ajax.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-ajax.php';
         }
+        
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-system.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-system.php';
         }
@@ -175,6 +178,35 @@ class AI_Verify {
             ));
         }
         
+        // NEW: Enqueue fact-check CSS and JS on results pages
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/css/factcheck.css')) {
+            wp_enqueue_style(
+                'ai-verify-factcheck',
+                AI_VERIFY_PLUGIN_URL . 'assets/css/factcheck.css',
+                array(),
+                AI_VERIFY_VERSION
+            );
+        }
+        
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/js/factcheck.js')) {
+            wp_enqueue_script(
+                'ai-verify-factcheck',
+                AI_VERIFY_PLUGIN_URL . 'assets/js/factcheck.js',
+                array('jquery'),
+                AI_VERIFY_VERSION,
+                true
+            );
+            
+            // Localize with fact-check specific data
+            $results_url = get_option('ai_verify_results_page_url', '');
+            
+            wp_localize_script('ai-verify-factcheck', 'aiVerifyFactcheck', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('ai_verify_factcheck_nonce'),
+                'results_url' => $results_url
+            ));
+        }
+        
         $enqueued = true;
     }
     
@@ -251,12 +283,17 @@ function ai_verify_init() {
 }
 add_action('plugins_loaded', 'ai_verify_init');
 
-// Activation hook
+// Activation hook - UPDATED
 register_activation_hook(__FILE__, function() {
     // Set default options
     add_option('ai_verify_auto_add', 'no');
     add_option('ai_verify_openrouter_key', '');
+    add_option('ai_verify_perplexity_key', '');
+    add_option('ai_verify_tavily_key', '');
+    add_option('ai_verify_firecrawl_key', '');
     add_option('ai_verify_google_factcheck_key', '');
+    add_option('ai_verify_factcheck_provider', 'perplexity');
+    add_option('ai_verify_scraping_service', 'jina');
     add_option('ai_verify_cta_title', 'Want More Verification Tools?');
     add_option('ai_verify_cta_description', 'Access our full suite of professional disinformation monitoring and investigation tools');
     add_option('ai_verify_cta_buttons', json_encode(array(
@@ -264,4 +301,13 @@ register_activation_hook(__FILE__, function() {
         array('text' => '🌐 Web Monitor', 'url' => 'https://disinformationcommission.com'),
         array('text' => '🛡️ All Tools', 'url' => 'https://disinformationcommission.com')
     )));
+    
+    // NEW: Create database tables for access tracking
+    if (class_exists('AI_Verify_Factcheck_Ajax')) {
+        AI_Verify_Factcheck_Ajax::init();
+    }
+    
+    if (class_exists('AI_Verify_Factcheck_Database')) {
+        AI_Verify_Factcheck_Database::create_tables();
+    }
 });

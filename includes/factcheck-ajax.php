@@ -25,6 +25,252 @@ class AI_Verify_Factcheck_Ajax {
         
         add_action('wp_ajax_ai_verify_process_factcheck', array(__CLASS__, 'process_factcheck'));
         add_action('wp_ajax_nopriv_ai_verify_process_factcheck', array(__CLASS__, 'process_factcheck'));
+
+        add_action('wp_ajax_ai_verify_check_access', array(__CLASS__, 'check_report_access'));
+        add_action('wp_ajax_nopriv_ai_verify_check_access', array(__CLASS__, 'check_report_access'));
+        
+        // Create table on init if doesn't exist
+        self::maybe_create_access_table();
+    }
+
+    /**
+     * Create table to track report access
+     */
+    private static function maybe_create_access_table() {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'ai_verify_report_access';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        
+        if (!$table_exists) {
+            $sql = "CREATE TABLE $table_name (
+                id bigint(20) NOT NULL AUTO_INCREMENT,
+                report_id varchar(255) NOT NULL,
+                user_email varchar(255) NOT NULL,
+                user_name varchar(255) DEFAULT NULL,
+                user_ip varchar(45) DEFAULT NULL,
+                plan_type varchar(20) DEFAULT 'free',
+                access_granted_at datetime DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY report_id (report_id),
+                KEY user_email (user_email),
+                KEY user_ip (user_ip),
+                UNIQUE KEY report_email (report_id, user_email)
+            ) $charset_collate;";
+            
+            require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+            dbDelta($sql);
+            
+            error_log('AI Verify: Created report_access table');
+        }
+    }
+    
+    /**
+     * Handle email submission and grant access
+     */
+    public static function handle_email_submission() {
+        // Verify nonce
+        if (!check_ajax_referer('ai_verify_factcheck_nonce', 'nonce', false)) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+        }
+        
+        $report_id = sanitize_text_field($_POST['report_id'] ?? '');
+        $email = sanitize_email($_POST['email'] ?? '');
+        $name = sanitize_text_field($_POST['name'] ?? '');
+        $plan = sanitize_text_field($_POST['plan'] ?? 'free');
+        
+        if (empty($report_id) || empty($email) || empty($name)) {
+            wp_send_json_error(array('message' => 'Missing required fields'));
+        }
+        
+        // Get user IP
+        $user_ip = self::get_user_ip();
+        
+        // Grant access in database
+        $access_granted = self::grant_report_access($report_id, $email, $name, $user_ip, $plan);
+        
+        if ($access_granted) {
+            // Update report with user info
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'ai_verify_factcheck_reports';
+            
+            $wpdb->update(
+                $table_name,
+                array(
+                    'user_email' => $email,
+                    'user_name' => $name
+                ),
+                array('report_id' => $report_id)
+            );
+            
+            error_log("AI Verify: Access granted for report $report_id to $email");
+            
+            wp_send_json_success(array(
+                'message' => 'Access granted',
+                'report_id' => $report_id
+            ));
+        } else {
+            wp_send_json_error(array('message' => 'Failed to grant access'));
+        }
+    }
+    
+    /**
+     * Grant access to a report
+     */
+    private static function grant_report_access($report_id, $email, $name, $ip, $plan) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'ai_verify_report_access';
+        
+        // Check if already has access
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE report_id = %s AND user_email = %s",
+            $report_id,
+            $email
+        ));
+        
+        if ($existing) {
+            error_log("AI Verify: User $email already has access to $report_id");
+            return true; // Already has access
+        }
+        
+        // Grant new access
+        $result = $wpdb->insert(
+            $table_name,
+            array(
+                'report_id' => $report_id,
+                'user_email' => $email,
+                'user_name' => $name,
+                'user_ip' => $ip,
+                'plan_type' => $plan,
+                'access_granted_at' => current_time('mysql')
+            ),
+            array('%s', '%s', '%s', '%s', '%s', '%s')
+        );
+        
+        return $result !== false;
+    }
+    
+    /**
+     * Check if user has access to report
+     */
+    public static function check_report_access() {
+        $report_id = sanitize_text_field($_POST['report_id'] ?? '');
+        
+        if (empty($report_id)) {
+            wp_send_json_error(array('message' => 'No report ID'));
+        }
+        
+        $has_access = self::user_has_access($report_id);
+        
+        if ($has_access) {
+            wp_send_json_success(array(
+                'has_access' => true,
+                'method' => $has_access['method']
+            ));
+        } else {
+            wp_send_json_success(array(
+                'has_access' => false
+            ));
+        }
+    }
+    
+    /**
+     * Check if current user has access to report
+     * Checks: 1. Database by IP, 2. Database by email cookie, 3. Pro plan cookie
+     */
+    public static function user_has_access($report_id) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'ai_verify_report_access';
+        $user_ip = self::get_user_ip();
+        
+        // Method 1: Check by IP address
+        $access = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE report_id = %s AND user_ip = %s",
+            $report_id,
+            $user_ip
+        ), ARRAY_A);
+        
+        if ($access) {
+            error_log("AI Verify: Access found by IP for report $report_id");
+            return array('method' => 'ip', 'data' => $access);
+        }
+        
+        // Method 2: Check by email cookie
+        if (isset($_COOKIE['ai_verify_user_email'])) {
+            $email = sanitize_email($_COOKIE['ai_verify_user_email']);
+            
+            $access = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table_name WHERE report_id = %s AND user_email = %s",
+                $report_id,
+                $email
+            ), ARRAY_A);
+            
+            if ($access) {
+                error_log("AI Verify: Access found by email for report $report_id");
+                return array('method' => 'email', 'data' => $access);
+            }
+        }
+        
+        // Method 3: Check for Pro subscription
+        if (isset($_COOKIE['ai_verify_pro']) && $_COOKIE['ai_verify_pro'] === 'true') {
+            error_log("AI Verify: Pro user accessing report $report_id");
+            return array('method' => 'pro', 'data' => array('plan_type' => 'pro'));
+        }
+        
+        // Method 4: Check usage within free limit
+        $usage_data = self::get_usage_data();
+        if ($usage_data['count'] < 5) {
+            // Within free limit - but still need to check if THIS specific report was accessed
+            $report_cookie = 'ai_verify_report_' . $report_id;
+            if (isset($_COOKIE[$report_cookie])) {
+                error_log("AI Verify: Report $report_id previously accessed (within free limit)");
+                return array('method' => 'free', 'data' => array('plan_type' => 'free'));
+            }
+        }
+        
+        error_log("AI Verify: No access found for report $report_id");
+        return false;
+    }
+    
+    /**
+     * Get usage data from cookie
+     */
+    private static function get_usage_data() {
+        if (!isset($_COOKIE['ai_verify_usage'])) {
+            return array('count' => 0, 'expires' => null);
+        }
+        
+        $data = json_decode(stripslashes($_COOKIE['ai_verify_usage']), true);
+        
+        if (!$data || !isset($data['count'])) {
+            return array('count' => 0, 'expires' => null);
+        }
+        
+        // Check if expired
+        if (isset($data['expires']) && strtotime($data['expires']) < time()) {
+            return array('count' => 0, 'expires' => null);
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * Get user IP address
+     */
+    private static function get_user_ip() {
+        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+            $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } else {
+            $ip = $_SERVER['REMOTE_ADDR'];
+        }
+        return sanitize_text_field($ip);
     }
     
     /**
@@ -332,3 +578,6 @@ class AI_Verify_Factcheck_Ajax {
         return ob_get_clean();
     }
 }
+
+// Initialize
+AI_Verify_Factcheck_Ajax::init();
