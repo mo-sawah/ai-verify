@@ -119,7 +119,8 @@ let currentReportId = null;
         SubscriptionManager.selectPlan(plan);
       });
       // ** THE FIX IS HERE: Use event delegation for the form submission **
-      $(document).on("submit", "#freePlanForm", function (e) {
+      $(document).on("submit", "#simpleAccessForm", function (e) {
+        // <-- CHANGE IS HERE
         e.preventDefault(); // This is the crucial part that stops the page reload
         SubscriptionManager.submitFreePlan();
       });
