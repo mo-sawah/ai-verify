@@ -1,20 +1,19 @@
 /**
- * AI Verify - Fact-Check System JavaScript (REVISED)
+ * Fact-Check System JavaScript (FINAL FIX)
  *
- * Implements a reliable, cookie-based "blur and unlock" email gate.
- * - Removes the complex 5-use limit in favor of a simple 30-day access cookie.
- * - Report is blurred until the user submits their email.
- * - Unlocking happens instantly via AJAX without a page reload.
- * - Uses event delegation for robust form handling.
+ * FIXES:
+ * - Uses event delegation for form submission to prevent page reloads.
+ * - Increases AJAX timeout to prevent connection errors on long analyses.
+ * - Consolidates script into a single block for reliability.
  */
 
-// Global variable to hold the current report's ID
 let currentReportId = null;
 
 (function ($) {
-  "use strict";
+  ("use strict");
 
-  // --- 1. SIMPLIFIED COOKIE & ACCESS MANAGEMENT ---
+  // --- UTILITIES ---
+
   const AccessManager = {
     cookieName: "ai_verify_access_granted",
 
@@ -26,7 +25,6 @@ let currentReportId = null;
       d.setTime(d.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
       const expires = "expires=" + d.toUTCString();
       document.cookie = `${this.cookieName}=true;${expires};path=/;SameSite=Lax`;
-      console.log("AI Verify: Access cookie set for 30 days.");
     },
 
     /**
@@ -40,43 +38,32 @@ let currentReportId = null;
         let c = ca[i];
         while (c.charAt(0) === " ") c = c.substring(1, c.length);
         if (c.indexOf(nameEQ) === 0) {
-          console.log("AI Verify: Access cookie found.");
           return true;
         }
       }
-      console.log("AI Verify: No access cookie found.");
       return false;
     },
   };
 
-  // --- 2. EMAIL GATE AND FORM SUBMISSION LOGIC ---
   const EmailGate = {
-    /**
-     * Initializes the email gate functionality.
-     */
     init: function () {
-      // Use event delegation to handle form submission.
-      // This is crucial for preventing page reloads.
+      // Use event delegation for a robust form handler that prevents page reloads
       $(document).on("submit", "#simpleAccessForm", function (e) {
-        e.preventDefault(); // Stop the default form submission (page reload)
+        e.preventDefault(); // This is the crucial part that stops the page reload
         EmailGate.handleSubmission();
       });
     },
 
-    /**
-     * Handles the AJAX submission of the email form.
-     */
     handleSubmission: function () {
       const email = $("#userEmail").val().trim();
       const name = $("#userName").val().trim();
-      const terms = $("#termsAccept").is(":checked");
 
-      if (!email || !name || !terms) {
+      if (!email || !name || !$("#termsAccept").is(":checked")) {
         alert("Please fill in all fields and accept the terms to continue.");
         return;
       }
 
-      const $btn = $("#simpleAccessSubmit");
+      const $btn = $("#simpleAccessSubmit"); // Make sure your button ID is correct
       $btn.prop("disabled", true).addClass("loading");
       $btn.find(".btn-text").hide();
       $btn.find(".btn-loading").css("display", "inline-block");
@@ -85,15 +72,16 @@ let currentReportId = null;
         url: aiVerifyFactcheck.ajax_url,
         type: "POST",
         data: {
-          action: "ai_verify_submit_email", // This action is handled in factcheck-ajax.php
+          action: "ai_verify_submit_email",
           nonce: aiVerifyFactcheck.nonce,
           report_id: currentReportId,
           email: email,
           name: name,
+          plan: "free", // Keep this for backend consistency if needed
         },
         success: function (response) {
           if (response.success) {
-            // On success, set the access cookie and unlock the content
+            // On success, set the cookie and unlock the content
             AccessManager.setAccessCookie();
             EmailGate.unlockContent();
           } else {
@@ -133,11 +121,120 @@ let currentReportId = null;
     },
   };
 
-  // --- 3. REPORT PAGE INITIALIZATION AND DISPLAY ---
+  function initSearchInterface(selector, isHeader) {
+    const context = $(selector);
+    if (context.length === 0) return;
 
-  /**
-   * Initializes the entire results page logic.
-   */
+    let currentInputType = "auto";
+    const inputId = isHeader ? "#factcheckInputHeader" : "#factcheck-input";
+    const submitId = isHeader ? "#factcheckSubmitHeader" : "#factcheck-submit";
+    const filterClass = isHeader ? ".filter-btn-mini" : ".filter-btn";
+    const exampleClass = isHeader ? ".example-btn-header" : ".example-btn";
+
+    context.on("click", filterClass, function () {
+      context.find(filterClass).removeClass("active");
+      $(this).addClass("active");
+      currentInputType = $(this).data("type");
+      if (!isHeader) updatePlaceholder(currentInputType);
+    });
+
+    context.on("click", exampleClass, function () {
+      context.find(inputId).val($(this).data("example")).focus();
+    });
+
+    context.on("click", submitId, function (e) {
+      e.preventDefault();
+      startFactCheck(context, currentInputType, isHeader);
+    });
+
+    context.on("keypress", inputId, function (e) {
+      if (e.which === 13) {
+        e.preventDefault();
+        startFactCheck(context, currentInputType, isHeader);
+      }
+    });
+  }
+
+  function updatePlaceholder(type) {
+    const placeholders = {
+      auto: "Paste URL or enter text to fact-check...",
+      url: "https://example.com/article",
+      title: "Enter article title...",
+      phrase: "Enter claim to fact-check...",
+    };
+    $("#factcheck-input").attr(
+      "placeholder",
+      placeholders[type] || placeholders.auto
+    );
+  }
+
+  function startFactCheck(context, currentInputType, isHeader) {
+    const inputId = isHeader ? "#factcheckInputHeader" : "#factcheck-input";
+    const submitId = isHeader ? "#factcheckSubmitHeader" : "#factcheck-submit";
+    const input = context.find(inputId).val().trim();
+
+    if (!input) {
+      alert("Please enter a URL, title, or claim to fact-check");
+      return;
+    }
+
+    let inputType = currentInputType;
+    if (inputType === "auto") {
+      inputType = detectInputType(input);
+    }
+
+    const $btn = context.find(submitId);
+    $btn.prop("disabled", true).addClass("loading");
+    $btn.find(".btn-text").hide();
+    $btn.find(".btn-loading").show();
+
+    $.ajax({
+      url: aiVerifyFactcheck.ajax_url,
+      type: "POST",
+      data: {
+        action: "ai_verify_start_factcheck",
+        nonce: aiVerifyFactcheck.nonce,
+        input_type: inputType,
+        input_value: input,
+      },
+      success: function (response) {
+        if (response.success) {
+          window.location.href =
+            aiVerifyFactcheck.results_url +
+            "?report=" +
+            response.data.report_id;
+        } else {
+          alert(response.data.message || "Failed to start fact-check");
+          $btn
+            .prop("disabled", false)
+            .removeClass("loading")
+            .find(".btn-text")
+            .show()
+            .end()
+            .find(".btn-loading")
+            .hide();
+        }
+      },
+      error: function () {
+        alert("Connection error. Please try again.");
+        $btn
+          .prop("disabled", false)
+          .removeClass("loading")
+          .find(".btn-text")
+          .show()
+          .end()
+          .find(".btn-loading")
+          .hide();
+      },
+    });
+  }
+
+  function detectInputType(input) {
+    if (input.match(/^https?:\/\//)) return "url";
+    if (input.length > 100) return "phrase";
+    return "title";
+  }
+
   function initResultsPage() {
     if ($("#factcheckResults").length === 0) return;
 
@@ -145,31 +242,29 @@ let currentReportId = null;
     currentReportId = urlParams.get("report");
 
     if (!currentReportId) {
-      $("#factcheckLoading").html("<p>Error: No report ID was provided.</p>");
+      $("#factcheckLoading").html("<p>No report ID provided</p>");
       return;
     }
 
-    // Start the process
+    // Start the report generation process immediately.
+    // The decision to show the paywall will be made after the report loads.
     startProcessing();
 
-    // Setup event listeners for report actions
+    // Keep event listeners for export and share buttons
     $(".export-btn").on("click", function () {
       exportReport($(this).data("format"));
     });
     $(".share-btn").on("click", shareReport);
   }
 
-  /**
-   * Begins the fact-check process on the backend and polls for completion.
-   */
   function startProcessing() {
     updateLoadingStep("Starting analysis...", 0);
 
-    // This AJAX call kicks off the background processing in PHP
+    // Start the background process
     $.ajax({
       url: aiVerifyFactcheck.ajax_url,
       type: "POST",
-      timeout: 30000, // Timeout for starting the process
+      timeout: 30000, // Only 30 seconds - just to start
       data: {
         action: "ai_verify_process_factcheck",
         nonce: aiVerifyFactcheck.nonce,
@@ -177,37 +272,33 @@ let currentReportId = null;
       },
       success: function (response) {
         if (response.success) {
+          // Process started - begin polling
           updateLoadingStep("Processing claims...", 10);
-          pollForCompletion(); // Start polling for the result
+          pollForCompletion();
         } else {
           updateLoadingStep(
-            "Error: " + (response.data.message || "Could not start analysis."),
+            "Error: " + (response.data.message || "Failed to start"),
             0
           );
         }
       },
-      error: function () {
-        updateLoadingStep(
-          "Failed to start the analysis process due to a connection error.",
-          0
-        );
+      error: function (xhr, status, error) {
+        console.error("Start Error:", status, error);
+        updateLoadingStep("Failed to start processing", 0);
       },
     });
   }
 
-  /**
-   * Polls the server to check if the report generation is complete.
-   */
   function pollForCompletion() {
     let attempts = 0;
-    const maxAttempts = 120; // 6 minutes max (120 attempts * 3s)
+    const maxAttempts = 120; // 120 attempts × 3 seconds = 6 minutes max
 
     const pollInterval = setInterval(function () {
       attempts++;
 
-      // Simulate progress while waiting
+      // Update progress bar based on time (fake progress)
       const fakeProgress = Math.min(10 + attempts * 0.7, 95);
-      updateLoadingStep("Analyzing content and sources...", fakeProgress);
+      updateLoadingStep("Analyzing content...", fakeProgress);
 
       $.ajax({
         url: aiVerifyFactcheck.ajax_url,
@@ -220,33 +311,32 @@ let currentReportId = null;
         },
         success: function (response) {
           if (response.success) {
-            if (response.data.status === "completed") {
+            const status = response.data.status;
+
+            if (status === "completed") {
               clearInterval(pollInterval);
-              updateLoadingStep("Analysis complete!", 100);
-              setTimeout(loadReport, 500); // Load the final report
-            } else if (response.data.status === "failed") {
+              updateLoadingStep("Processing complete!", 100);
+              setTimeout(() => loadReport(), 500);
+            } else if (status === "failed") {
               clearInterval(pollInterval);
-              updateLoadingStep("The analysis failed to complete.", 0);
+              updateLoadingStep("Processing failed", 0);
             }
-            // If still 'processing', the interval will continue
+            // Otherwise keep polling
           }
         },
         error: function () {
-          // Don't stop polling on a single failed request
-          console.log("Polling attempt " + attempts + " failed, retrying...");
+          console.log("Poll attempt " + attempts + " failed, retrying...");
         },
       });
 
+      // Stop after max attempts
       if (attempts >= maxAttempts) {
         clearInterval(pollInterval);
-        updateLoadingStep("The analysis timed out. Please try again later.", 0);
+        updateLoadingStep("Processing timeout - please refresh the page", 0);
       }
     }, 3000); // Poll every 3 seconds
   }
 
-  /**
-   * Loads the final report data from the server.
-   */
   function loadReport() {
     $.ajax({
       url: aiVerifyFactcheck.ajax_url,
@@ -258,16 +348,19 @@ let currentReportId = null;
       },
       success: function (response) {
         if (response.success && response.data.report) {
+          // 1. Display the report data first, so it's ready in the background.
           displayReport(response.data.report);
 
-          // ** KEY LOGIC: Check for cookie and show/hide the email gate **
+          // 2. NOW, check if the user has access.
           if (AccessManager.hasAccessCookie()) {
+            // If they have access, make sure the content is not blurred.
             EmailGate.unlockContent();
           } else {
+            // If they DON'T have access, show the email gate which will blur the content.
             EmailGate.show();
           }
         } else {
-          alert("Failed to load the final report data.");
+          alert("Failed to load report data.");
         }
       },
       error: () =>
@@ -275,10 +368,11 @@ let currentReportId = null;
     });
   }
 
-  /**
-   * Renders the report data into the HTML.
-   * (This function and its helpers remain largely the same)
-   */
+  function updateLoadingStep(text, progress) {
+    $("#loadingStep").text(text);
+    $("#progressBar").css("width", progress + "%");
+  }
+
   function displayReport(report) {
     $("#factcheckLoading").fadeOut(300, () =>
       $("#factcheckReport").fadeIn(300)
@@ -305,13 +399,6 @@ let currentReportId = null;
     const propaganda = report.metadata?.propaganda_techniques || [];
     if (propaganda.length > 0) displayPropaganda(propaganda);
     setupClaimsFilter();
-  }
-
-  // --- HELPER & UTILITY FUNCTIONS (Mostly Unchanged) ---
-
-  function updateLoadingStep(text, progress) {
-    $("#loadingStep").text(text);
-    $("#progressBar").css("width", progress + "%");
   }
 
   function displayPropaganda(techniques) {
@@ -343,10 +430,8 @@ let currentReportId = null;
 
   function displayClaims(claims) {
     const $container = $("#claimsAnalysis").empty();
-    if (!claims || claims.length === 0) {
-      $container.html(
-        '<p class="no-data">No verifiable claims were found in the content.</p>'
-      );
+    if (claims.length === 0) {
+      $container.html('<p class="no-data">No claims analyzed</p>');
       return;
     }
     claims.forEach((claim, index) => {
@@ -361,13 +446,58 @@ let currentReportId = null;
               <span class="claim-rating ${ratingClass}">${escapeHtml(
         claim.rating || "Unknown"
       )}</span>
-              <span class="claim-confidence">${confidencePercent}% confidence</span>
+              <span class="claim-confidence">${confidencePercent}%</span>
             </div>
           </div>
           <div class="claim-text">${escapeHtml(claim.claim)}</div>
           <div class="claim-explanation">${escapeHtml(
-            claim.explanation || "No explanation available."
+            claim.explanation || "No explanation available"
           )}</div>
+          ${
+            claim.evidence_for?.length > 0
+              ? `
+            <div class="claim-evidence">
+              <div class="evidence-title">✓ Evidence Supporting:</div>
+              <ul class="evidence-list">${claim.evidence_for
+                .map((e) => "<li>" + escapeHtml(e) + "</li>")
+                .join("")}</ul>
+            </div>`
+              : ""
+          }
+          ${
+            claim.evidence_against?.length > 0
+              ? `
+            <div class="claim-evidence">
+              <div class="evidence-title">✗ Evidence Contradicting:</div>
+              <ul class="evidence-list">${claim.evidence_against
+                .map((e) => "<li>" + escapeHtml(e) + "</li>")
+                .join("")}</ul>
+            </div>`
+              : ""
+          }
+          ${
+            claim.red_flags?.length > 0
+              ? `
+            <div class="red-flags-section">
+              <div class="red-flags-title">... Red Flags Detected</div>
+              <ul class="red-flags-list">${claim.red_flags
+                .map((flag) => "<li>" + escapeHtml(flag) + "</li>")
+                .join("")}</ul>
+            </div>`
+              : ""
+          }
+          <div class="claim-meta">
+            <span class="claim-type">${escapeHtml(
+              claim.type || "general"
+            )}</span>
+            ${
+              claim.method
+                ? `<span class="claim-method">🔡 ${escapeHtml(
+                    claim.method
+                  )}</span>`
+                : ""
+            }
+          </div>
         </div>`;
       $container.append(claimCardHTML);
     });
@@ -379,10 +509,10 @@ let currentReportId = null;
       $(".filter-chip").removeClass("active");
       $(this).addClass("active");
       if (filter === "all") {
-        $(".claim-card").show();
+        $(".claim-card").removeClass("hidden");
       } else {
         $(".claim-card").each(function () {
-          $(this).toggle($(this).data("filter-type") === filter);
+          $(this).toggleClass("hidden", $(this).data("filter-type") !== filter);
         });
       }
     });
@@ -398,10 +528,8 @@ let currentReportId = null;
 
   function displaySources(sources) {
     const $container = $("#sourcesList").empty();
-    if (!sources || sources.length === 0) {
-      $container.html(
-        '<p class="no-data">No sources were consulted for this analysis.</p>'
-      );
+    if (sources.length === 0) {
+      $container.html('<p class="no-data">No sources available</p>');
       return;
     }
     const uniqueSources = Array.from(
@@ -419,7 +547,7 @@ let currentReportId = null;
               source.url
                 ? `<a href="${escapeHtml(
                     source.url
-                  )}" target="_blank" rel="noopener noreferrer" class="source-url">${escapeHtml(
+                  )}" target="_blank" class="source-url">${escapeHtml(
                     source.url
                   )}</a>`
                 : ""
@@ -448,22 +576,20 @@ let currentReportId = null;
   function shareReport() {
     const url = window.location.href;
     if (navigator.share) {
-      navigator.share({ title: "Fact-Check Report", url: url });
+      navigator.share({ title: "Fact-Check Report", url });
     } else {
       navigator.clipboard
         .writeText(url)
-        .then(() => alert("Report link copied to clipboard!"));
+        .then(() => alert("Link copied to clipboard!"));
     }
   }
 
   function formatDate(dateString) {
-    if (!dateString) return "-";
     const date = new Date(dateString);
     return date.toLocaleDateString() + " " + date.toLocaleTimeString();
   }
 
   function escapeHtml(text) {
-    if (text === null || typeof text === "undefined") return "";
     return String(text).replace(
       /[&<>"']/g,
       (m) =>
@@ -477,12 +603,17 @@ let currentReportId = null;
     );
   }
 
-  // --- 4. INITIALIZE EVERYTHING ON DOCUMENT READY ---
+  // Initialize all components on document ready
+  // Initialize all components on document ready
   $(document).ready(function () {
-    initResultsPage();
-    EmailGate.init();
+    // Initializes the search handlers ("Analyze" button)
+    initSearchInterface(".factcheck-search-wrapper", false);
+    initSearchInterface(".factcheck-header-search", true);
 
-    // The search interface logic is separate and can be kept as is,
-    // assuming it redirects to the results page correctly.
+    // Initializes the results page logic (loading, polling, displaying)
+    initResultsPage();
+
+    // Initializes our new email gate form handler
+    EmailGate.init();
   });
 })(jQuery);
