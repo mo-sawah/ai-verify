@@ -2,6 +2,8 @@
  * Fact-Check System JavaScript
  */
 
+let currentReportId = null;
+
 /**
  * Cookie-Based Usage Tracking & Subscription System
  * ADD THIS CODE TO THE BEGINNING OF factcheck.js
@@ -9,7 +11,6 @@
 
 (function ($) {
   "use strict";
-  let currentReportId = null;
 
   // Cookie Management
   const FactcheckCookies = {
