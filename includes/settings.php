@@ -1,7 +1,7 @@
 <?php
 /**
  * Settings Page for AI Verify
- * Updated with Perplexity API and Fact-Check Provider Selection
+ * UPDATED: Added Tavily API integration for web search
  */
 
 if (!defined('ABSPATH')) {
@@ -45,7 +45,7 @@ class AI_Verify_Settings {
         register_setting('ai_verify_settings', 'ai_verify_results_page_url');
         register_setting('ai_verify_settings', 'ai_verify_firecrawl_key');
         register_setting('ai_verify_settings', 'ai_verify_scraping_service');
-        register_setting('ai_verify_settings', 'ai_verify_tavily_key');
+        register_setting('ai_verify_settings', 'ai_verify_tavily_key'); // NEW
     }
     
     public static function render_settings_page() {
@@ -75,8 +75,9 @@ class AI_Verify_Settings {
             update_option('ai_verify_cta_button_3_url', esc_url_raw($_POST['ai_verify_cta_button_3_url']));
             update_option('ai_verify_firecrawl_key', sanitize_text_field($_POST['ai_verify_firecrawl_key']));
             update_option('ai_verify_scraping_service', sanitize_text_field($_POST['ai_verify_scraping_service']));
+            update_option('ai_verify_tavily_key', sanitize_text_field($_POST['ai_verify_tavily_key'])); // NEW
 
-            echo '<div class="notice notice-success"><p>Settings saved successfully!</p></div>';
+            echo '<div class="notice notice-success"><p><strong>✓ Settings saved successfully!</strong></p></div>';
         }
         
         // Get all options
@@ -98,17 +99,18 @@ class AI_Verify_Settings {
         $cta_btn_3_url = get_option('ai_verify_cta_button_3_url', 'https://disinformationcommission.com');
         $firecrawl_key = get_option('ai_verify_firecrawl_key', '');
         $scraping_service = get_option('ai_verify_scraping_service', 'jina');
+        $tavily_key = get_option('ai_verify_tavily_key', ''); // NEW
         ?>
         
         <div class="wrap">
             <h1>🔍 AI Verify Settings</h1>
             <p>Configure your professional fact-check verification system</p>
             
-            <form method="post" action="">
+            <form method="post" action="" style="max-width: 1200px;">
                 <?php wp_nonce_field('ai_verify_settings_nonce'); ?>
                 
                 <table class="form-table">
-                    <tr><th colspan="2"><h2>General Settings</h2></th></tr>
+                    <tr><th colspan="2"><h2>⚙️ General Settings</h2></th></tr>
                     <tr>
                         <th scope="row"><label for="ai_verify_auto_add">Auto-add to Posts</label></th>
                         <td>
@@ -120,7 +122,7 @@ class AI_Verify_Settings {
                         </td>
                     </tr>
 
-                    <tr><th colspan="2"><h2>⚙️ Scraping Service Settings</h2></th></tr>
+                    <tr><th colspan="2"><h2>🌐 Web Scraping Service</h2></th></tr>
                     <tr>
                         <th scope="row"><label for="ai_verify_scraping_service">Scraping Service</label></th>
                         <td>
@@ -128,63 +130,74 @@ class AI_Verify_Settings {
                                 <option value="jina" <?php selected($scraping_service, 'jina'); ?>>Jina Reader API (Free)</option>
                                 <option value="firecrawl" <?php selected($scraping_service, 'firecrawl'); ?>>Firecrawl API (Recommended)</option>
                             </select>
-                            <p class="description">Choose the service to scrape web content. Firecrawl is highly recommended for reliability.</p>
+                            <p class="description">Choose the service to scrape web content. Firecrawl is recommended for reliability.</p>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="ai_verify_firecrawl_key">Firecrawl API Key</label></th>
                         <td>
                             <input type="text" name="ai_verify_firecrawl_key" id="ai_verify_firecrawl_key" value="<?php echo esc_attr($firecrawl_key); ?>" class="regular-text">
-                            <p class="description">Required if using Firecrawl API. Get your key from <a href="https://firecrawl.dev" target="_blank">Firecrawl.dev</a>.</p>
+                            <p class="description">Required if using Firecrawl. Get your key from <a href="https://firecrawl.dev" target="_blank">Firecrawl.dev</a></p>
                         </td>
                     </tr>
                     
                     <tr><th colspan="2"><h2>🔬 Fact-Check AI Provider</h2></th></tr>
                     <tr>
-                        <th scope="row"><label for="ai_verify_factcheck_provider">Fact-Check Provider</label></th>
+                        <th scope="row"><label for="ai_verify_factcheck_provider">Primary Fact-Check Provider</label></th>
                         <td>
                             <select name="ai_verify_factcheck_provider" id="ai_verify_factcheck_provider">
-                                <option value="perplexity" <?php selected($factcheck_provider, 'perplexity'); ?>>Perplexity AI (Recommended - Has Built-in Web Search)</option>
-                                <option value="openrouter" <?php selected($factcheck_provider, 'openrouter'); ?>>OpenRouter (Claude/GPT)</option>
+                                <option value="perplexity" <?php selected($factcheck_provider, 'perplexity'); ?>>✨ Perplexity AI (RECOMMENDED - Built-in Web Search)</option>
+                                <option value="openrouter" <?php selected($factcheck_provider, 'openrouter'); ?>>OpenRouter (Claude/GPT) + External Search</option>
                             </select>
-                            <p class="description"><strong>Recommended:</strong> Perplexity has built-in web search and is specifically designed for fact-checking.</p>
+                            <p class="description"><strong>💡 Recommended:</strong> Perplexity has built-in real-time web search and is specifically optimized for fact-checking. OpenRouter requires Tavily/Firecrawl for web search.</p>
                         </td>
                     </tr>
                     
-                    <tr>
-                        <th scope="row"><label for="ai_verify_perplexity_key">Perplexity API Key</label></th>
+                    <tr style="background: #f0fdf4;">
+                        <th scope="row"><label for="ai_verify_perplexity_key">✨ Perplexity API Key (Primary)</label></th>
                         <td>
                             <input type="text" name="ai_verify_perplexity_key" id="ai_verify_perplexity_key" value="<?php echo esc_attr($perplexity_key); ?>" class="regular-text">
-                            <p class="description">Get your API key from <a href="https://www.perplexity.ai/settings/api" target="_blank">Perplexity.ai</a> (~$5 for 1000 searches)</p>
+                            <p class="description">
+                                <strong>BEST OPTION:</strong> Get your API key from <a href="https://www.perplexity.ai/settings/api" target="_blank">Perplexity.ai</a><br>
+                                💰 Cost: ~$5 for 1000 fact-checks | Uses: <code>llama-3.1-sonar-large-128k-online</code><br>
+                                ✓ Built-in web search | ✓ Source citations | ✓ Optimized for factual queries
+                            </p>
                         </td>
                     </tr>
 
-                    <tr>
-                        <th scope="row"><label for="ai_verify_tavily_key">Tavily API Key (For OpenRouter Web Search)</label></th>
+                    <tr><th colspan="2"><h2>🔍 Web Search APIs (For OpenRouter Fallback)</h2></th></tr>
+                    <tr style="background: #fffbeb;">
+                        <th scope="row"><label for="ai_verify_tavily_key">⭐ Tavily API Key (Recommended)</label></th>
                         <td>
-                            <input type="text" name="ai_verify_tavily_key" id="ai_verify_tavily_key" value="<?php echo esc_attr(get_option('ai_verify_tavily_key', '')); ?>" class="regular-text">
-                            <p class="description">Required if using OpenRouter. Get FREE key from <a href="https://tavily.com" target="_blank">Tavily.com</a> (1000 searches/month free)</p>
+                            <input type="text" name="ai_verify_tavily_key" id="ai_verify_tavily_key" value="<?php echo esc_attr($tavily_key); ?>" class="regular-text">
+                            <p class="description">
+                                <strong>RECOMMENDED FOR OPENROUTER:</strong> Get FREE key from <a href="https://tavily.com" target="_blank">Tavily.com</a><br>
+                                💰 FREE: 1000 searches/month | AI-optimized search for fact-checking<br>
+                                Used when OpenRouter is selected as fact-check provider
+                            </p>
                         </td>
                     </tr>
                     
-                    <tr><th colspan="2"><h2>🤖 AI Chatbot Settings (Optional)</h2></th></tr>
                     <tr>
-                        <th scope="row"><label for="ai_verify_openrouter_key">OpenRouter API Key</label></th>
+                        <th scope="row"><label for="ai_verify_openrouter_key">OpenRouter API Key (Fallback)</label></th>
                         <td>
                             <input type="text" name="ai_verify_openrouter_key" id="ai_verify_openrouter_key" value="<?php echo esc_attr($openrouter_key); ?>" class="regular-text">
-                            <p class="description">Get your API key from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter.ai</a></p>
+                            <p class="description">
+                                Fallback AI provider. Get your API key from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter.ai</a><br>
+                                💰 Cost varies by model | Requires Tavily or Firecrawl for web search
+                            </p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><label for="ai_verify_openrouter_model">AI Model</label></th>
+                        <th scope="row"><label for="ai_verify_openrouter_model">OpenRouter Model</label></th>
                         <td>
                             <select name="ai_verify_openrouter_model" id="ai_verify_openrouter_model">
-                                <option value="anthropic/claude-3.5-sonnet" <?php selected($openrouter_model, 'anthropic/claude-3.5-sonnet'); ?>>Claude 3.5 Sonnet (Recommended)</option>
+                                <option value="anthropic/claude-3.5-sonnet" <?php selected($openrouter_model, 'anthropic/claude-3.5-sonnet'); ?>>Claude 3.5 Sonnet (Best Quality)</option>
                                 <option value="openai/gpt-4o" <?php selected($openrouter_model, 'openai/gpt-4o'); ?>>GPT-4o</option>
                                 <option value="google/gemini-pro-1.5" <?php selected($openrouter_model, 'google/gemini-pro-1.5'); ?>>Gemini Pro 1.5</option>
                                 <option value="meta-llama/llama-3.1-70b-instruct" <?php selected($openrouter_model, 'meta-llama/llama-3.1-70b-instruct'); ?>>Llama 3.1 70B</option>
                             </select>
-                            <p class="description">Choose the AI model for chatbot and fallback fact-checking</p>
+                            <p class="description">Used when OpenRouter is selected as fact-check provider</p>
                         </td>
                     </tr>
                     
@@ -193,7 +206,10 @@ class AI_Verify_Settings {
                         <th scope="row"><label for="ai_verify_google_factcheck_key">Google Fact Check API Key</label></th>
                         <td>
                             <input type="text" name="ai_verify_google_factcheck_key" id="ai_verify_google_factcheck_key" value="<?php echo esc_attr($google_key); ?>" class="regular-text">
-                            <p class="description">Get your API key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> (Free - checks existing fact-checks)</p>
+                            <p class="description">
+                                Checks existing fact-checks from trusted sources. Get FREE key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a><br>
+                                Enable "Fact Check Tools API" in your Google Cloud project
+                            </p>
                         </td>
                     </tr>
                     
@@ -227,39 +243,123 @@ class AI_Verify_Settings {
                 </table>
                 
                 <p class="submit">
-                    <input type="submit" name="ai_verify_save_settings" class="button button-primary" value="Save Settings">
+                    <input type="submit" name="ai_verify_save_settings" class="button button-primary" value="💾 Save All Settings">
                 </p>
             </form>
             
-            <div class="card" style="max-width: 900px; margin-top: 30px;">
-                <h2>📖 Setup Guide</h2>
+            <div class="card" style="max-width: 1200px; margin-top: 30px;">
+                <h2>📖 UPDATED Setup Guide (v2.0)</h2>
+                
+                <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 20px;">
+                    <h3 style="margin-top: 0; color: #059669;">✨ Recommended Setup (Best Results)</h3>
+                    <ol style="margin: 0;">
+                        <li><strong>Scraping:</strong> Firecrawl API ($) - <a href="https://firecrawl.dev" target="_blank">Get Key</a></li>
+                        <li><strong>Fact-Checking:</strong> Perplexity API (~$5 for 1000 checks) - <a href="https://www.perplexity.ai/settings/api" target="_blank">Get Key</a></li>
+                        <li><strong>Google Fact Check:</strong> (Optional, FREE) - <a href="https://console.cloud.google.com" target="_blank">Get Key</a></li>
+                    </ol>
+                    <p style="margin-bottom: 0;"><strong>Why this works best:</strong> Perplexity has built-in real-time web search specifically optimized for factual queries. No additional configuration needed!</p>
+                </div>
+
+                <div style="background: #fffbeb; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 20px;">
+                    <h3 style="margin-top: 0; color: #d97706;">💰 Budget Setup (Free/Cheap Options)</h3>
+                    <ol style="margin: 0;">
+                        <li><strong>Scraping:</strong> Jina Reader (FREE)</li>
+                        <li><strong>Web Search:</strong> Tavily API (FREE - 1000/month) - <a href="https://tavily.com" target="_blank">Get Key</a></li>
+                        <li><strong>Fact-Checking:</strong> OpenRouter (~$5-10 for 500-1000 checks) - <a href="https://openrouter.ai" target="_blank">Get Key</a></li>
+                    </ol>
+                    <p style="margin-bottom: 0;"><strong>Note:</strong> This requires Tavily for web search. Works well but requires more configuration.</p>
+                </div>
+                
+                <h3>🔄 How the NEW System Works:</h3>
                 <ol>
-                    <li><strong>Scraping API:</strong> Get Firecrawl API key (recommended) from <a href="https://firecrawl.dev" target="_blank">Firecrawl.dev</a></li>
-                    <li><strong>Perplexity API (Recommended):</strong> Sign up at <a href="https://www.perplexity.ai/settings/api" target="_blank">Perplexity.ai</a> (~$5 for 1000 fact-checks with web search)</li>
-                    <li><strong>OR OpenRouter API:</strong> Sign up at <a href="https://openrouter.ai" target="_blank">OpenRouter.ai</a> and add credits ($5 = ~500 fact-checks)</li>
-                    <li><strong>Google Fact Check API (Optional):</strong> Enable "Fact Check Tools API" in Google Cloud Console (Free, checks existing fact-checks)</li>
-                    <li><strong>Create Results Page:</strong> Create a new page and add shortcode: <code>[ai_factcheck_results]</code></li>
-                    <li><strong>Add to Posts:</strong> Use shortcode <code>[ai_verify]</code> or enable "Auto-add to Posts"</li>
+                    <li><strong>Step 1:</strong> Scrape article content (Firecrawl or Jina)</li>
+                    <li><strong>Step 2:</strong> Extract verifiable claims (ClaimBuster API - FREE)</li>
+                    <li><strong>Step 3:</strong> Check Google Fact Check API for existing fact-checks (if key provided)</li>
+                    <li><strong>Step 4:</strong> PRIMARY METHOD:
+                        <ul>
+                            <li><strong>If Perplexity selected:</strong> Direct call to Perplexity (built-in web search) ✨</li>
+                            <li><strong>If OpenRouter selected:</strong> Search web with Tavily → Send results to OpenRouter AI</li>
+                        </ul>
+                    </li>
+                    <li><strong>Step 5:</strong> Detect propaganda techniques</li>
+                    <li><strong>Step 6:</strong> Calculate credibility score (IMPROVED SCORING)</li>
+                    <li><strong>Step 7:</strong> Generate professional report with sources</li>
                 </ol>
                 
-                <h3>💡 Why Perplexity is Recommended:</h3>
-                <ul>
-                    <li>✅ Built-in web search (no additional configuration needed)</li>
-                    <li>✅ Specifically designed for research and fact-checking</li>
-                    <li>✅ Returns sources with every answer</li>
-                    <li>✅ More accurate than GPT for factual queries</li>
-                    <li>✅ Cost-effective (~$0.005 per fact-check)</li>
+                <h3>🎯 What Changed in v2.0:</h3>
+                <ul style="list-style: none; padding-left: 0;">
+                    <li>✅ <strong>Perplexity optimization:</strong> No redundant Firecrawl calls - uses built-in search</li>
+                    <li>✅ <strong>Tavily integration:</strong> AI-optimized search API (FREE tier available)</li>
+                    <li>✅ <strong>Better scoring:</strong> "Unverified" = neutral (0.5), not penalty</li>
+                    <li>✅ <strong>Paywall UX:</strong> Shows AFTER report generation (not before)</li>
+                    <li>✅ <strong>Cookie fix:</strong> Only sets after successful AJAX submission</li>
+                    <li>✅ <strong>Smarter fallbacks:</strong> Tries best method first, falls back gracefully</li>
                 </ul>
-                
-                <h3>📊 How It Works:</h3>
-                <p><strong>Step 1:</strong> Scrape article with Firecrawl/Jina<br>
-                <strong>Step 2:</strong> Extract claims with ClaimBuster (FREE) or AI<br>
-                <strong>Step 3:</strong> Check Google Fact Check API for existing fact-checks<br>
-                <strong>Step 4:</strong> Use Perplexity/OpenRouter with WEB SEARCH to verify new claims<br>
-                <strong>Step 5:</strong> Detect propaganda techniques<br>
-                <strong>Step 6:</strong> Calculate credibility score and generate professional report</p>
+
+                <h3>💡 API Comparison:</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                    <tr style="background: #f3f4f6;">
+                        <th style="padding: 10px; text-align: left; border: 1px solid #e5e7eb;">Service</th>
+                        <th style="padding: 10px; text-align: left; border: 1px solid #e5e7eb;">Cost</th>
+                        <th style="padding: 10px; text-align: left; border: 1px solid #e5e7eb;">Best For</th>
+                        <th style="padding: 10px; text-align: left; border: 1px solid #e5e7eb;">Web Search?</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;"><strong>Perplexity</strong></td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">~$0.005/check</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Primary fact-checking</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">✅ Built-in</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;"><strong>Tavily</strong></td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">FREE (1000/mo)</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Web search for OpenRouter</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">✅ Yes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;"><strong>Firecrawl</strong></td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Paid plans</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Scraping + search (fallback)</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">✅ Yes</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;"><strong>OpenRouter</strong></td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Varies by model</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Fallback AI provider</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">❌ Needs external</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;"><strong>Google Fact Check</strong></td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">FREE</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">Check existing fact-checks</td>
+                        <td style="padding: 10px; border: 1px solid #e5e7eb;">N/A</td>
+                    </tr>
+                </table>
+
+                <div style="background: #fef2f2; padding: 20px; border-radius: 8px; border-left: 4px solid #ef4444; margin-top: 20px;">
+                    <h3 style="margin-top: 0; color: #dc2626;">⚠️ Important Notes:</h3>
+                    <ul style="margin: 0;">
+                        <li>Create a results page with shortcode: <code>[ai_factcheck_results]</code></li>
+                        <li>Set the results page URL in settings above</li>
+                        <li>Test with a small API budget first to verify everything works</li>
+                        <li>Monitor your API usage through each provider's dashboard</li>
+                        <li>Paywall now shows AFTER report is generated for better UX</li>
+                    </ul>
+                </div>
             </div>
         </div>
+        
+        <style>
+            .form-table th { width: 280px; }
+            .form-table code { 
+                background: #f3f4f6; 
+                padding: 2px 6px; 
+                border-radius: 3px;
+                font-size: 13px;
+            }
+            .card h3 { color: #1f2937; margin-top: 20px; }
+            .card ul { line-height: 1.8; }
+        </style>
         <?php
     }
 }
