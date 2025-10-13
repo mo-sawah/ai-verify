@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.10
+ * Version: 2.0.12
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.10');
+define('AI_VERIFY_VERSION', '2.0.12');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -200,8 +200,9 @@ class AI_Verify {
             // Localize with fact-check specific data
             $results_url = get_option('ai_verify_results_page_url', '');
             
+            // *** THE FIX IS HERE: We force an absolute URL for admin-ajax.php ***
             wp_localize_script('ai-verify-factcheck', 'aiVerifyFactcheck', array(
-                'ajax_url' => admin_url('admin-ajax.php'),
+                'ajax_url' => admin_url('admin-ajax.php', 'https'),
                 'nonce' => wp_create_nonce('ai_verify_factcheck_nonce'),
                 'results_url' => $results_url
             ));
