@@ -1,8 +1,7 @@
 <?php
 /**
  * OPTIMIZED Claim Extraction and Analysis Engine
- * 
- * IMPROVEMENTS:
+ * * IMPROVEMENTS:
  * - Perplexity uses built-in search (no redundant Firecrawl calls)
  * - Added Tavily integration as alternative to Firecrawl
  * - Improved OpenRouter web search strategy
@@ -44,8 +43,7 @@ class AI_Verify_Factcheck_Analyzer {
 
     /**
      * OPTIMIZED: Fact-check claims using best available method
-     * 
-     * Priority:
+     * * Priority:
      * 1. Google Fact Check API (existing fact-checks)
      * 2. Perplexity AI with built-in search (recommended)
      * 3. OpenRouter + Tavily/Firecrawl search (fallback)
@@ -171,7 +169,7 @@ IMPORTANT:
                 'max_tokens' => 2000
                 // **FIX:** REMOVED 'return_citations' and 'return_images' parameters which caused the 400 error.
             )),
-            'timeout' => 300
+            'timeout' => 90
         ));
         
         if (is_wp_error($response)) {
@@ -213,8 +211,7 @@ IMPORTANT:
     
     /**
      * OPTIMIZED: Check claim with OpenRouter + Smart Web Search
-     * 
-     * Strategy: Try Tavily first (AI-optimized), fallback to Firecrawl
+     * * Strategy: Try Tavily first (AI-optimized), fallback to Firecrawl
      */
     private static function check_with_openrouter_optimized($claim, $context) {
         $api_key = get_option('ai_verify_openrouter_key');
@@ -301,7 +298,7 @@ CRITICAL INSTRUCTIONS:
                 'temperature' => 0.2,
                 'max_tokens' => 2000
             )),
-            'timeout' => 300
+            'timeout' => 90
         ));
         
         if (is_wp_error($response)) {
@@ -318,7 +315,7 @@ CRITICAL INSTRUCTIONS:
         $body_text = wp_remote_retrieve_body($response);
         
         if ($status_code !== 200) {
-            error_log('AI Verify: OpenRouter API error - Status ' . $status_code);
+            error_log('AI Verify: OpenRouter API error - Status ' . $status_code . ' | Body: ' . $body_text);
             return array(
                 'rating' => 'Unverified',
                 'explanation' => 'API error. Check API key and credits.',
@@ -369,7 +366,7 @@ CRITICAL INSTRUCTIONS:
                 'include_domains' => array(), // Can whitelist trusted domains
                 'exclude_domains' => array() // Can blacklist unreliable sources
             )),
-            'timeout' => 300
+            'timeout' => 30
         ));
         
         if (is_wp_error($response)) {
@@ -412,7 +409,7 @@ CRITICAL INSTRUCTIONS:
         
         $response = wp_remote_post('https://api.firecrawl.dev/v1/search', array(
             'method'  => 'POST',
-            'timeout' => 300,
+            'timeout' => 60,
             'headers' => array(
                 'Content-Type'  => 'application/json',
                 'Authorization' => 'Bearer ' . $api_key,
@@ -598,8 +595,7 @@ CRITICAL INSTRUCTIONS:
     
     /**
      * FIXED: Calculate overall credibility score
-     * 
-     * CHANGES:
+     * * CHANGES:
      * - "Unverified" now = 0.5 (neutral), not penalized
      * - Better weighting based on confidence
      * - More balanced scoring
@@ -680,10 +676,11 @@ CRITICAL INSTRUCTIONS:
             $batch = array_slice($sentences, $i, $batch_size);
             $text = implode(' ', $batch);
             
-            $response = wp_remote_post('https://idir.uta.edu/claimbuster/api/v2/score/text', array(
+            // *** THE FIX IS HERE: Added a trailing slash to the URL. ***
+            $response = wp_remote_post('https://idir.uta.edu/claimbuster/api/v2/score/text/', array(
                 'headers' => array('Content-Type' => 'application/json'),
                 'body' => json_encode(array('text' => $text)),
-                'timeout' => 300
+                'timeout' => 30
             ));
             
             if (is_wp_error($response)) {
@@ -757,7 +754,7 @@ Article: {$content}";
                 'temperature' => 0.3,
                 'max_tokens' => 2000
             )),
-            'timeout' => 300
+            'timeout' => 60
         ));
         
         if (is_wp_error($response)) {
