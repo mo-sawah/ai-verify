@@ -206,11 +206,17 @@ class AI_Verify_Factcheck_Ajax {
         ));
     }
     
-    /**
-     * Process fact-check (main processing with propaganda detection)
-     */
     public static function process_factcheck() {
         check_ajax_referer('ai_verify_factcheck_nonce', 'nonce');
+        
+        // *** FIX 1: Increase PHP execution time limit ***
+        set_time_limit(300); // 5 minutes
+        ini_set('max_execution_time', 300);
+        
+        // *** FIX 2: Disable output buffering to prevent timeouts ***
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
         
         $report_id = sanitize_text_field($_POST['report_id']);
         
@@ -223,6 +229,8 @@ class AI_Verify_Factcheck_Ajax {
         try {
             $input_type = $report['input_type'];
             $input_value = $report['input_value'];
+            
+            error_log("AI Verify: Starting fact-check process for report: $report_id");
             
             // Step 1: Scrape or search
             if ($input_type === 'url') {
@@ -259,6 +267,8 @@ class AI_Verify_Factcheck_Ajax {
                         array() // empty propaganda
                     );
                     
+                    error_log("AI Verify: Fact-check completed successfully (Google FC)");
+                    
                     wp_send_json_success(array(
                         'status' => 'completed',
                         'report_id' => $report_id
@@ -272,18 +282,23 @@ class AI_Verify_Factcheck_Ajax {
             
             // Step 2: Detect propaganda techniques
             $propaganda = AI_Verify_Factcheck_Analyzer::detect_propaganda($content);
+            error_log("AI Verify: Detected " . count($propaganda) . " propaganda techniques");
             
             // Step 3: Extract claims
             $claims = AI_Verify_Factcheck_Analyzer::extract_claims($content);
+            error_log("AI Verify: Extracted " . count($claims) . " claims");
             
             AI_Verify_Factcheck_Database::save_claims($report_id, $claims);
             
             // Step 4: Fact-check claims
+            error_log("AI Verify: Starting fact-check of " . count($claims) . " claims");
             $factcheck_results = AI_Verify_Factcheck_Analyzer::factcheck_claims($claims, $context, $input_value);
+            error_log("AI Verify: Fact-checking complete, got " . count($factcheck_results) . " results");
             
             // Step 5: Calculate overall score
             $overall_score = AI_Verify_Factcheck_Analyzer::calculate_overall_score($factcheck_results);
             $credibility_rating = AI_Verify_Factcheck_Analyzer::get_credibility_rating($overall_score);
+            error_log("AI Verify: Calculated score: $overall_score - Rating: $credibility_rating");
             
             // Step 6: Collect sources
             $sources = array();
@@ -307,9 +322,11 @@ class AI_Verify_Factcheck_Ajax {
                     }
                 }
             }
+            error_log("AI Verify: Found " . count($unique_sources) . " unique sources");
             
             // Step 7: Save results with propaganda detection
-            AI_Verify_Factcheck_Database::save_results(
+            error_log("AI Verify: Saving results to database...");
+            $save_result = AI_Verify_Factcheck_Database::save_results(
                 $report_id,
                 $factcheck_results,
                 $overall_score,
@@ -318,6 +335,13 @@ class AI_Verify_Factcheck_Ajax {
                 $propaganda
             );
             
+            if (!$save_result) {
+                throw new Exception('Failed to save results to database');
+            }
+            
+            error_log("AI Verify: ✅ Fact-check completed successfully for report: $report_id");
+            
+            // *** FIX 3: Ensure we send response before any shutdown ***
             wp_send_json_success(array(
                 'status' => 'completed',
                 'report_id' => $report_id,
@@ -325,9 +349,17 @@ class AI_Verify_Factcheck_Ajax {
                 'rating' => $credibility_rating
             ));
             
+            // This will terminate the script and ensure response is sent
+            exit;
+            
         } catch (Exception $e) {
+            error_log("AI Verify: ❌ Error in fact-check process: " . $e->getMessage());
+            error_log("AI Verify: Stack trace: " . $e->getTraceAsString());
+            
             AI_Verify_Factcheck_Database::update_status($report_id, 'failed');
+            
             wp_send_json_error(array('message' => $e->getMessage()));
+            exit;
         }
     }
     

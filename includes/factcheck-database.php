@@ -143,33 +143,30 @@ class AI_Verify_Factcheck_Database {
         );
     }
     
-    /**
-     * Save fact-check results (updated with propaganda)
-     */
-    public static function save_results($report_id, $results, $score, $rating, $sources, $propaganda = array()) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . self::$table_name;
-        
-        $metadata = array(
-            'propaganda_techniques' => $propaganda,
-            'analysis_version' => '2.0'
-        );
-        
-        $wpdb->update(
-            $table_name,
-            array(
-                'factcheck_results' => json_encode($results),
-                'overall_score' => floatval($score),
-                'credibility_rating' => sanitize_text_field($rating),
-                'sources' => json_encode($sources),
-                'metadata' => json_encode($metadata),
-                'status' => 'completed',
-                'completed_at' => current_time('mysql')
-            ),
-            array('report_id' => $report_id)
-        );
-    }
+    public static function save_results($report_id, $factcheck_results, $overall_score, $credibility_rating, $sources, $propaganda = array()) {
+    global $wpdb;
+    
+    $table = $wpdb->prefix . 'ai_verify_factcheck_reports';
+    
+    $result = $wpdb->update(
+        $table,
+        array(
+            'factcheck_results' => json_encode($factcheck_results),
+            'overall_score' => $overall_score,
+            'credibility_rating' => $credibility_rating,
+            'sources' => json_encode($sources),
+            'metadata' => json_encode(array('propaganda_techniques' => $propaganda)),
+            'status' => 'completed',
+            'completed_at' => current_time('mysql')
+        ),
+        array('report_id' => $report_id),
+        array('%s', '%f', '%s', '%s', '%s', '%s', '%s'),
+        array('%s')
+    );
+    
+    // Return true if update succeeded
+    return $result !== false;
+}
     
     /**
      * Get report by ID (updated to include metadata)
