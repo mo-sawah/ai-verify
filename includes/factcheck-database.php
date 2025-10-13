@@ -90,6 +90,26 @@ class AI_Verify_Factcheck_Database {
             array('report_id' => $report_id)
         );
     }
+
+    /**
+     * Update processing progress
+     */
+    public static function update_progress($report_id, $progress, $message = '') {
+        global $wpdb;
+        
+        $table = $wpdb->prefix . 'ai_verify_factcheck_reports';
+        
+        $wpdb->update(
+            $table,
+            array(
+                'progress' => $progress,
+                'progress_message' => $message
+            ),
+            array('report_id' => $report_id),
+            array('%d', '%s'),
+            array('%s')
+        );
+    }
     
     /**
      * Update report status
@@ -97,12 +117,14 @@ class AI_Verify_Factcheck_Database {
     public static function update_status($report_id, $status) {
         global $wpdb;
         
-        $table_name = $wpdb->prefix . self::$table_name;
+        $table = $wpdb->prefix . 'ai_verify_factcheck_reports';
         
         $wpdb->update(
-            $table_name,
-            array('status' => sanitize_text_field($status)),
-            array('report_id' => $report_id)
+            $table,
+            array('status' => $status),
+            array('report_id' => $report_id),
+            array('%s'),
+            array('%s')
         );
     }
     
