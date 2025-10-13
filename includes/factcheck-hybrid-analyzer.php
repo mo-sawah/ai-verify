@@ -153,21 +153,43 @@ class AI_Verify_Factcheck_Hybrid_Analyzer {
             return $response;
         }
 
-        $body = wp_remote_retrieve_body($response);
-        preg_match('/\{.*\}/s', $body, $matches);
+        $body_string = wp_remote_retrieve_body($response);
+        $response_data = json_decode($body_string, true);
 
-        // **IMPROVED VALIDATION AND LOGGING**
-        if (empty($matches[0])) {
-            error_log('AI Verify (Hybrid): OpenRouter single-call FAILED to find a JSON object. Raw response body: ' . $body);
-            return new WP_Error('json_extraction_failed', 'AI response did not contain a JSON object.');
-        }
-
-        $result = json_decode($matches[0], true);
+        // First, check if the main API response is valid JSON
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('AI Verify (Hybrid): OpenRouter single-call FAILED to parse JSON. JSON content: ' . $matches[0]);
-            return new WP_Error('json_decode_failed', 'AI response contained invalid JSON.');
+            error_log('AI Verify (Hybrid): OpenRouter single-call FAILED to decode main API response. Raw Body: ' . $body_string);
+            return new WP_Error('json_decode_failed_outer', 'Could not decode the main API response from OpenRouter.');
         }
 
-        return $result;
+        // Now, safely navigate the nested structure to get the AI's content string
+        if (empty($response_data['choices'][0]['message']['content'])) {
+            error_log('AI Verify (Hybrid): OpenRouter response is missing the content block. Full response: ' . print_r($response_data, true));
+            return new WP_Error('missing_content_block', 'AI response was valid but did not contain the expected content.');
+        }
+
+        $content_string = $response_data['choices'][0]['message']['content'];
+
+        // Finally, decode the inner JSON string which contains our report
+        $report_data = json_decode($content_string, true);
+
+        // If decoding fails, it might be because the AI added text around the JSON.
+        // Try one last time to extract it with regex as a fallback.
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            preg_match('/\{.*\}/s', $content_string, $matches);
+            if (!empty($matches[0])) {
+                $report_data = json_decode($matches[0], true);
+                // If it's valid now, return it
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return $report_data;
+                }
+            }
+
+            // If it still fails, log the error and return.
+            error_log('AI Verify (Hybrid): OpenRouter single-call FAILED to decode the inner report JSON. Content string was: ' . $content_string);
+            return new WP_Error('json_decode_failed_inner', 'The content from the AI was not a valid JSON report.');
+        }
+
+        return $report_data;
     }
 }
