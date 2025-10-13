@@ -284,22 +284,23 @@ class AI_Verify_Factcheck_Ajax {
 
             // Step 2: ROUTING LOGIC - Choose analysis method
             if ($provider === 'single_call_perplexity' || $provider === 'single_call_openrouter') {
-                
+
                 // === NEW "HYBRID" SINGLE CALL WORKFLOW ===
                 error_log("AI Verify: Using Hybrid Single Call workflow with provider: $provider");
-                
-                // Step A: Check Google Fact-Check API first
+
+                // Step A: Check Google Fact-Check API first (This now works because the method is public)
                 $google_key = get_option('ai_verify_google_factcheck_key');
                 $google_factcheck_context = '';
                 if (!empty($google_key)) {
                     $google_result = AI_Verify_Factcheck_Analyzer::check_google_factcheck($context, $google_key);
                     if ($google_result && !empty($google_result['explanation'])) {
-                         $google_factcheck_context = "\n\n=== EXISTING FACT-CHECK (Source: Google Fact Check API) ===\nClaim: {$google_result['explanation']}\nRating: {$google_result['rating']}\nSource: {$google_result['source']['name']} ({$google_result['source']['url']})\n---";
-                         error_log("AI Verify: Found existing fact-check via Google API.");
+                        $google_factcheck_context = "\n\n=== EXISTING FACT-CHECK (Source: Google Fact Check API) ===\nClaim: {$google_result['explanation']}\nRating: {$google_result['rating']}\nSource: {$google_result['source']['name']} ({$google_result['source']['url']})\n---";
+                        error_log("AI Verify: Found existing fact-check via Google API.");
                     }
                 }
 
                 // Step B: Get real-time web search results from Tavily (with Firecrawl fallback)
+                // NOTE: We are making these public in the main analyzer as they are generic utilities.
                 $web_results = AI_Verify_Factcheck_Analyzer::search_web_tavily($context);
                 if (empty($web_results)) {
                     error_log('AI Verify: Tavily failed. Falling back to Firecrawl Search.');
@@ -316,14 +317,14 @@ class AI_Verify_Factcheck_Ajax {
                     error_log("AI Verify: Warning - No web search results found for single-call analysis.");
                 }
 
-                // Step C: Call the appropriate AI with the combined context
+                // Step C: Call the appropriate AI from the NEW HYBRID ANALYZER CLASS
                 $result_data = null;
                 $combined_context = $google_factcheck_context . $web_search_context;
 
                 if ($provider === 'single_call_perplexity') {
-                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_perplexity($content, $context, $combined_context);
+                    $result_data = AI_Verify_Factcheck_Hybrid_Analyzer::analyze_with_single_call_perplexity($content, $context, $combined_context);
                 } else { // single_call_openrouter
-                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_openrouter($content, $context, $combined_context);
+                    $result_data = AI_Verify_Factcheck_Hybrid_Analyzer::analyze_with_single_call_openrouter($content, $context, $combined_context);
                 }
 
                 if (is_wp_error($result_data)) {
