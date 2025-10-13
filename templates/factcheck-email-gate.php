@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
                 <p>Enter your details to view the full report. This will grant you free access for 30 days.</p>
             </div>
             
-            <form id="simpleAccessForm" class="plan-form active">
+            <form id="freePlanForm" class="plan-form active">
                 <div class="form-group">
                     <label for="userName">
                         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
