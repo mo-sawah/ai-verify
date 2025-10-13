@@ -10,7 +10,8 @@ if (!defined('ABSPATH')) {
 ?>
 
 <div class="factcheck-results-wrapper" id="factcheckResults">
-    <!-- Loading State -->
+    <?php include 'factcheck-email-gate.php'; ?>
+
     <div class="factcheck-loading" id="factcheckLoading">
         <div class="loading-spinner">
             <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
