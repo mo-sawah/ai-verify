@@ -42,6 +42,10 @@ class AI_Verify_Settings {
         
         // Fact-Check System Settings
         register_setting('ai_verify_settings', 'ai_verify_results_page_url');
+
+        // --- NEW SETTINGS FOR FIRECRAWL ---
+        register_setting('ai_verify_settings', 'ai_verify_firecrawl_key');
+        register_setting('ai_verify_settings', 'ai_verify_scraping_service');
     }
     
     public static function render_settings_page() {
@@ -49,15 +53,17 @@ class AI_Verify_Settings {
             return;
         }
         
-        // Save settings
+        // Save settings (Your original manual save logic)
         if (isset($_POST['ai_verify_save_settings'])) {
             check_admin_referer('ai_verify_settings_nonce');
             
-            update_option('ai_verify_auto_add', sanitize_text_field($_POST['ai_verify_auto_add']));
+            // Your existing options
+            update_option('ai_verify_auto_add', isset($_POST['ai_verify_auto_add']) ? 'yes' : 'no');
             update_option('ai_verify_openrouter_key', sanitize_text_field($_POST['ai_verify_openrouter_key']));
             update_option('ai_verify_openrouter_model', sanitize_text_field($_POST['ai_verify_openrouter_model']));
             update_option('ai_verify_google_factcheck_key', sanitize_text_field($_POST['ai_verify_google_factcheck_key']));
             update_option('ai_verify_factcheck_max_age', intval($_POST['ai_verify_factcheck_max_age']));
+            update_option('ai_verify_results_page_url', esc_url_raw($_POST['ai_verify_results_page_url']));
             update_option('ai_verify_cta_title', sanitize_text_field($_POST['ai_verify_cta_title']));
             update_option('ai_verify_cta_description', sanitize_textarea_field($_POST['ai_verify_cta_description']));
             update_option('ai_verify_cta_button_1_text', sanitize_text_field($_POST['ai_verify_cta_button_1_text']));
@@ -67,14 +73,20 @@ class AI_Verify_Settings {
             update_option('ai_verify_cta_button_3_text', sanitize_text_field($_POST['ai_verify_cta_button_3_text']));
             update_option('ai_verify_cta_button_3_url', esc_url_raw($_POST['ai_verify_cta_button_3_url']));
             
+            // --- NEW OPTIONS TO SAVE ---
+            update_option('ai_verify_firecrawl_key', sanitize_text_field($_POST['ai_verify_firecrawl_key']));
+            update_option('ai_verify_scraping_service', sanitize_text_field($_POST['ai_verify_scraping_service']));
+
             echo '<div class="notice notice-success"><p>Settings saved successfully!</p></div>';
         }
         
+        // Get all options
         $auto_add = get_option('ai_verify_auto_add', 'no');
         $openrouter_key = get_option('ai_verify_openrouter_key', '');
         $openrouter_model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
         $google_key = get_option('ai_verify_google_factcheck_key', '');
         $factcheck_max_age = get_option('ai_verify_factcheck_max_age', 2);
+        $results_page_url = get_option('ai_verify_results_page_url', '');
         $cta_title = get_option('ai_verify_cta_title', 'Want More Verification Tools?');
         $cta_description = get_option('ai_verify_cta_description', 'Access our full suite of professional disinformation monitoring and investigation tools');
         $cta_btn_1_text = get_option('ai_verify_cta_button_1_text', '🔍 OSINT Search');
@@ -83,6 +95,10 @@ class AI_Verify_Settings {
         $cta_btn_2_url = get_option('ai_verify_cta_button_2_url', 'https://disinformationcommission.com');
         $cta_btn_3_text = get_option('ai_verify_cta_button_3_text', '🛡️ All Tools');
         $cta_btn_3_url = get_option('ai_verify_cta_button_3_url', 'https://disinformationcommission.com');
+
+        // --- NEW OPTIONS TO GET ---
+        $firecrawl_key = get_option('ai_verify_firecrawl_key', '');
+        $scraping_service = get_option('ai_verify_scraping_service', 'jina');
         ?>
         
         <div class="wrap">
@@ -93,13 +109,9 @@ class AI_Verify_Settings {
                 <?php wp_nonce_field('ai_verify_settings_nonce'); ?>
                 
                 <table class="form-table">
+                    <tr><th colspan="2"><h2>General Settings</h2></th></tr>
                     <tr>
-                        <th colspan="2"><h2>General Settings</h2></th>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ai_verify_auto_add">Auto-add to Posts</label>
-                        </th>
+                        <th scope="row"><label for="ai_verify_auto_add">Auto-add to Posts</label></th>
                         <td>
                             <label>
                                 <input type="checkbox" name="ai_verify_auto_add" id="ai_verify_auto_add" value="yes" <?php checked($auto_add, 'yes'); ?>>
@@ -108,23 +120,37 @@ class AI_Verify_Settings {
                             <p class="description">Or use shortcode: <code>[ai_verify]</code></p>
                         </td>
                     </tr>
-                    
+
+                    <!-- NEW SECTION FOR SCRAPING -->
+                    <tr><th colspan="2"><h2>⚙️ Scraping Service Settings</h2></th></tr>
                     <tr>
-                        <th colspan="2"><h2>🤖 AI Chatbot Settings</h2></th>
+                        <th scope="row"><label for="ai_verify_scraping_service">Scraping Service</label></th>
+                        <td>
+                            <select name="ai_verify_scraping_service" id="ai_verify_scraping_service">
+                                <option value="jina" <?php selected($scraping_service, 'jina'); ?>>Jina Reader API (Default)</option>
+                                <option value="firecrawl" <?php selected($scraping_service, 'firecrawl'); ?>>Firecrawl API (Recommended)</option>
+                            </select>
+                            <p class="description">Choose the service to scrape web content. Firecrawl is highly recommended for reliability.</p>
+                        </td>
                     </tr>
                     <tr>
-                        <th scope="row">
-                            <label for="ai_verify_openrouter_key">OpenRouter API Key</label>
-                        </th>
+                        <th scope="row"><label for="ai_verify_firecrawl_key">Firecrawl API Key</label></th>
+                        <td>
+                            <input type="text" name="ai_verify_firecrawl_key" id="ai_verify_firecrawl_key" value="<?php echo esc_attr($firecrawl_key); ?>" class="regular-text">
+                            <p class="description">Required if using Firecrawl API. Get your key from <a href="https://firecrawl.dev" target="_blank">Firecrawl.dev</a>.</p>
+                        </td>
+                    </tr>
+                    
+                    <tr><th colspan="2"><h2>🤖 AI Chatbot Settings</h2></th></tr>
+                    <tr>
+                        <th scope="row"><label for="ai_verify_openrouter_key">OpenRouter API Key</label></th>
                         <td>
                             <input type="text" name="ai_verify_openrouter_key" id="ai_verify_openrouter_key" value="<?php echo esc_attr($openrouter_key); ?>" class="regular-text">
                             <p class="description">Get your API key from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter.ai</a></p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">
-                            <label for="ai_verify_openrouter_model">AI Model</label>
-                        </th>
+                        <th scope="row"><label for="ai_verify_openrouter_model">AI Model</label></th>
                         <td>
                             <select name="ai_verify_openrouter_model" id="ai_verify_openrouter_model">
                                 <option value="anthropic/claude-3.5-sonnet" <?php selected($openrouter_model, 'anthropic/claude-3.5-sonnet'); ?>>Claude 3.5 Sonnet (Recommended)</option>
@@ -136,27 +162,27 @@ class AI_Verify_Settings {
                         </td>
                     </tr>
                     
+                    <tr><th colspan="2"><h2>📰 Fact-Check System Settings</h2></th></tr>
                     <tr>
-                        <th colspan="2"><h2>📰 Fact-Check API Settings</h2></th>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ai_verify_google_factcheck_key">Google Fact Check API Key</label>
-                        </th>
+                        <th scope="row"><label for="ai_verify_google_factcheck_key">Google Fact Check API Key</label></th>
                         <td>
                             <input type="text" name="ai_verify_google_factcheck_key" id="ai_verify_google_factcheck_key" value="<?php echo esc_attr($google_key); ?>" class="regular-text">
                             <p class="description">Get your API key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> (Free)</p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">
-                            <label for="ai_verify_factcheck_max_age">Show Fact-Checks From</label>
-                        </th>
+                        <th scope="row"><label for="ai_verify_results_page_url">Results Page URL</label></th>
+                        <td>
+                            <input type="url" name="ai_verify_results_page_url" id="ai_verify_results_page_url" value="<?php echo esc_attr($results_page_url); ?>" class="regular-text">
+                            <p class="description">Enter the full URL of the page with the <code>[ai_factcheck_results]</code> shortcode.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="ai_verify_factcheck_max_age">Show Fact-Checks From</label></th>
                         <td>
                             <select name="ai_verify_factcheck_max_age" id="ai_verify_factcheck_max_age">
                                 <option value="1" <?php selected($factcheck_max_age, 1); ?>>Last year only</option>
                                 <option value="2" <?php selected($factcheck_max_age, 2); ?>>Last 2 years</option>
-                                <option value="3" <?php selected($factcheck_max_age, 3); ?>>Last 3 years</option>
                                 <option value="5" <?php selected($factcheck_max_age, 5); ?>>Last 5 years</option>
                                 <option value="999" <?php selected($factcheck_max_age, 999); ?>>All time (no filter)</option>
                             </select>
@@ -164,50 +190,12 @@ class AI_Verify_Settings {
                         </td>
                     </tr>
                     
-                    <tr>
-                        <th colspan="2"><h2>🎯 Call-to-Action Settings</h2></th>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ai_verify_cta_title">CTA Title</label>
-                        </th>
-                        <td>
-                            <input type="text" name="ai_verify_cta_title" id="ai_verify_cta_title" value="<?php echo esc_attr($cta_title); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="ai_verify_cta_description">CTA Description</label>
-                        </th>
-                        <td>
-                            <textarea name="ai_verify_cta_description" id="ai_verify_cta_description" class="large-text" rows="3"><?php echo esc_textarea($cta_description); ?></textarea>
-                        </td>
-                    </tr>
-                    
-                    <tr>
-                        <th scope="row">Button 1</th>
-                        <td>
-                            <input type="text" name="ai_verify_cta_button_1_text" placeholder="Button Text" value="<?php echo esc_attr($cta_btn_1_text); ?>" class="regular-text" style="margin-bottom: 5px;">
-                            <br>
-                            <input type="url" name="ai_verify_cta_button_1_url" placeholder="https://example.com" value="<?php echo esc_url($cta_btn_1_url); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Button 2</th>
-                        <td>
-                            <input type="text" name="ai_verify_cta_button_2_text" placeholder="Button Text" value="<?php echo esc_attr($cta_btn_2_text); ?>" class="regular-text" style="margin-bottom: 5px;">
-                            <br>
-                            <input type="url" name="ai_verify_cta_button_2_url" placeholder="https://example.com" value="<?php echo esc_url($cta_btn_2_url); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Button 3</th>
-                        <td>
-                            <input type="text" name="ai_verify_cta_button_3_text" placeholder="Button Text" value="<?php echo esc_attr($cta_btn_3_text); ?>" class="regular-text" style="margin-bottom: 5px;">
-                            <br>
-                            <input type="url" name="ai_verify_cta_button_3_url" placeholder="https://example.com" value="<?php echo esc_url($cta_btn_3_url); ?>" class="regular-text">
-                        </td>
-                    </tr>
+                    <tr><th colspan="2"><h2>🎯 Call-to-Action Settings</h2></th></tr>
+                    <tr><th scope="row"><label for="ai_verify_cta_title">CTA Title</label></th><td><input type="text" name="ai_verify_cta_title" id="ai_verify_cta_title" value="<?php echo esc_attr($cta_title); ?>" class="regular-text"></td></tr>
+                    <tr><th scope="row"><label for="ai_verify_cta_description">CTA Description</label></th><td><textarea name="ai_verify_cta_description" id="ai_verify_cta_description" class="large-text" rows="3"><?php echo esc_textarea($cta_description); ?></textarea></td></tr>
+                    <tr><th scope="row">Button 1</th><td><input type="text" name="ai_verify_cta_button_1_text" placeholder="Button Text" value="<?php echo esc_attr($cta_btn_1_text); ?>" class="regular-text" style="margin-bottom: 5px;"><br><input type="url" name="ai_verify_cta_button_1_url" placeholder="https://example.com" value="<?php echo esc_url($cta_btn_1_url); ?>" class="regular-text"></td></tr>
+                    <tr><th scope="row">Button 2</th><td><input type="text" name="ai_verify_cta_button_2_text" placeholder="Button Text" value="<?php echo esc_attr($cta_btn_2_text); ?>" class="regular-text" style="margin-bottom: 5px;"><br><input type="url" name="ai_verify_cta_button_2_url" placeholder="https://example.com" value="<?php echo esc_url($cta_btn_2_url); ?>" class="regular-text"></td></tr>
+                    <tr><th scope="row">Button 3</th><td><input type="text" name="ai_verify_cta_button_3_text" placeholder="Button Text" value="<?php echo esc_attr($cta_btn_3_text); ?>" class="regular-text" style="margin-bottom: 5px;"><br><input type="url" name="ai_verify_cta_button_3_url" placeholder="https://example.com" value="<?php echo esc_url($cta_btn_3_url); ?>" class="regular-text"></td></tr>
                 </table>
                 
                 <p class="submit">
@@ -218,13 +206,15 @@ class AI_Verify_Settings {
             <div class="card" style="max-width: 800px; margin-top: 30px;">
                 <h2>📖 How to Use</h2>
                 <ol>
-                    <li><strong>OpenRouter API:</strong> Sign up at OpenRouter.ai and add credits ($5 = ~500-1000 conversations)</li>
-                    <li><strong>Google Fact Check API:</strong> Enable "Fact Check Tools API" in Google Cloud Console (Free, no billing required)</li>
-                    <li><strong>Shortcode:</strong> Use <code>[ai_verify]</code> anywhere in your posts</li>
-                    <li><strong>Auto-add:</strong> Check the box above to add tools automatically to all posts</li>
+                    <li><strong>Scraping APIs:</strong> Get an API key for Firecrawl (recommended) for the best results.</li>
+                    <li><strong>OpenRouter API:</strong> Sign up at OpenRouter.ai and add credits ($5 = ~500-1000 conversations).</li>
+                    <li><strong>Google Fact Check API:</strong> Enable "Fact Check Tools API" in Google Cloud Console (Free, no billing required).</li>
+                    <li><strong>Shortcode:</strong> Use <code>[ai_verify]</code> anywhere in your posts.</li>
+                    <li><strong>Auto-add:</strong> Check the box above to add tools automatically to all posts.</li>
                 </ol>
             </div>
         </div>
         <?php
     }
 }
+

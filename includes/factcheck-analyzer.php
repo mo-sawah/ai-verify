@@ -249,7 +249,7 @@ class AI_Verify_Factcheck_Analyzer {
                 'temperature' => 0.3,
                 'max_tokens' => 1000
             )),
-            'timeout' => 60
+            'timeout' => 300
         ));
         
         if (is_wp_error($response)) {

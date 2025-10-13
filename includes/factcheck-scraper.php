@@ -1,6 +1,7 @@
 <?php
 /**
- * Web Scraper using Jina Reader API
+ * Web Scraper Engine
+ * Integrates multiple scraping services.
  */
 
 if (!defined('ABSPATH')) {
@@ -9,26 +10,93 @@ if (!defined('ABSPATH')) {
 
 class AI_Verify_Factcheck_Scraper {
     
-    const JINA_API_URL = 'https://r.jina.ai/';
-    
     /**
-     * Scrape URL using Jina Reader
+     * Main scrape function - acts as a controller.
+     *
+     * @param string $url The URL to scrape.
+     * @return array|WP_Error The scraped content or an error.
      */
     public static function scrape_url($url) {
-        // Validate URL
+        // Validate URL first
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
             return new WP_Error('invalid_url', 'Invalid URL provided');
         }
+
+        $service = get_option('ai_verify_scraping_service', 'jina');
         
-        // Build Jina Reader URL
-        $jina_url = self::JINA_API_URL . urlencode($url);
+        if ($service === 'firecrawl' && get_option('ai_verify_firecrawl_key')) {
+            $result = self::scrape_with_firecrawl($url);
+        } else {
+            $result = self::scrape_with_jina($url);
+        }
+
+        // If the primary scraper fails, you could add a fallback here if desired
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        // Return the parsed content from the successful scraper
+        return self::parse_content($result['content'], $result['title'], $url);
+    }
+
+    /**
+     * Scrapes a URL using the Firecrawl API.
+     *
+     * @param string $url The URL to scrape.
+     * @return array|WP_Error An array with raw 'title' and 'content' or an error.
+     */
+    private static function scrape_with_firecrawl($url) {
+        $api_key = get_option('ai_verify_firecrawl_key');
+        if (empty($api_key)) {
+            return new WP_Error('firecrawl_error', 'Firecrawl API key is not configured.');
+        }
+
+        $api_url = 'https://api.firecrawl.dev/v0/scrape';
         
-        // Make request
+        $response = wp_remote_post($api_url, array(
+            'method'  => 'POST',
+            'timeout' => 120,
+            'headers' => array(
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ),
+            'body'    => json_encode(array(
+                'url' => $url,
+                'pageOptions' => array('from' => 'jina') // Use Jina Reader via Firecrawl
+            )),
+        ));
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $response_code = wp_remote_retrieve_response_code($response);
+
+        if ($response_code !== 200 || empty($body['data']['markdown'])) {
+            $error_message = isset($body['error']) ? $body['error'] : 'Failed to retrieve content from Firecrawl.';
+            return new WP_Error('firecrawl_error', $error_message);
+        }
+
+        return array(
+            'title'   => $body['data']['metadata']['title'] ?? 'Untitled',
+            'content' => $body['data']['markdown']
+        );
+    }
+    
+    /**
+     * Scrape URL using Jina Reader API (your original method).
+     *
+     * @param string $url The URL to scrape.
+     * @return array|WP_Error An array with raw 'title' and 'content' or an error.
+     */
+    private static function scrape_with_jina($url) {
+        $jina_url = 'https://r.jina.ai/' . $url;
+        
         $response = wp_remote_get($jina_url, array(
-            'timeout' => 30,
+            'timeout' => 60,
             'headers' => array(
                 'X-Return-Format' => 'markdown',
-                'X-Timeout' => '30'
             )
         ));
         
@@ -39,39 +107,28 @@ class AI_Verify_Factcheck_Scraper {
         $body = wp_remote_retrieve_body($response);
         $status = wp_remote_retrieve_response_code($response);
         
-        if ($status !== 200) {
-            return new WP_Error('scrape_failed', 'Failed to scrape URL. Status: ' . $status);
+        if ($status !== 200 || empty($body)) {
+            return new WP_Error('scrape_failed', 'Failed to scrape URL with Jina. Status: ' . $status);
         }
         
-        if (empty($body)) {
-            return new WP_Error('empty_content', 'No content retrieved from URL');
-        }
-        
-        // Parse and clean content
-        $parsed = self::parse_content($body, $url);
-        
-        return $parsed;
+        // Extract title from the markdown itself
+        preg_match('/^# (.+)$/m', $body, $title_match);
+        $title = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($url);
+
+        return array(
+            'title' => $title,
+            'content' => $body
+        );
     }
     
     /**
-     * Parse scraped content
+     * Parse scraped content (this is your original function).
      */
-    private static function parse_content($markdown, $original_url) {
-        // Extract title (first H1 or H2)
-        preg_match('/^#+ (.+)$/m', $markdown, $title_match);
-        $title = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($original_url);
-        
-        // Extract metadata if present
+    private static function parse_content($markdown, $title, $original_url) {
         $author = self::extract_author($markdown);
         $date = self::extract_date($markdown);
-        
-        // Clean markdown content
         $content = self::clean_markdown($markdown);
-        
-        // Extract main text paragraphs
         $paragraphs = self::extract_paragraphs($content);
-        
-        // Get word count
         $word_count = str_word_count(strip_tags($content));
         
         return array(
@@ -87,9 +144,8 @@ class AI_Verify_Factcheck_Scraper {
         );
     }
     
-    /**
-     * Extract title from URL
-     */
+    // --- ALL YOUR ORIGINAL HELPER FUNCTIONS REMAIN UNCHANGED ---
+
     private static function extract_title_from_url($url) {
         $parts = parse_url($url);
         $path = isset($parts['path']) ? $parts['path'] : '';
@@ -98,139 +154,58 @@ class AI_Verify_Factcheck_Scraper {
         return ucwords($title);
     }
     
-    /**
-     * Extract author from markdown
-     */
     private static function extract_author($markdown) {
-        // Look for common author patterns
-        $patterns = array(
-            '/By ([A-Z][a-z]+ [A-Z][a-z]+)/i',
-            '/Author: ([A-Z][a-z]+ [A-Z][a-z]+)/i',
-            '/Written by ([A-Z][a-z]+ [A-Z][a-z]+)/i'
-        );
-        
-        foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $markdown, $match)) {
-                return trim($match[1]);
-            }
-        }
-        
+        $patterns = array('/By ([A-Z][a-z]+ [A-Z][a-z]+)/i', '/Author: ([A-Z][a-z]+ [A-Z][a-z]+)/i', '/Written by ([A-Z][a-z]+ [A-Z][a-z]+)/i');
+        foreach ($patterns as $pattern) { if (preg_match($pattern, $markdown, $match)) { return trim($match[1]); } }
         return null;
     }
     
-    /**
-     * Extract publication date
-     */
     private static function extract_date($markdown) {
-        // Look for date patterns
-        $patterns = array(
-            '/Published: (\d{4}-\d{2}-\d{2})/',
-            '/Date: (\d{4}-\d{2}-\d{2})/',
-            '/(\d{1,2}\/\d{1,2}\/\d{4})/',
-            '/(\w+ \d{1,2}, \d{4})/'
-        );
-        
-        foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $markdown, $match)) {
-                return trim($match[1]);
-            }
-        }
-        
+        $patterns = array('/Published: (\d{4}-\d{2}-\d{2})/', '/Date: (\d{4}-\d{2}-\d{2})/', '/(\d{1,2}\/\d{1,2}\/\d{4})/', '/(\w+ \d{1,2}, \d{4})/');
+        foreach ($patterns as $pattern) { if (preg_match($pattern, $markdown, $match)) { return trim($match[1]); } }
         return null;
     }
     
-    /**
-     * Clean markdown content
-     */
     private static function clean_markdown($markdown) {
-        // Remove navigation and footer content
-        $markdown = preg_replace('/\[.*?\]\(.*?\)/s', '', $markdown); // Remove links
-        
-        // Remove excessive newlines
+        $markdown = preg_replace('/\[.*?\]\(.*?\)/s', '', $markdown);
         $markdown = preg_replace('/\n{3,}/', "\n\n", $markdown);
-        
-        // Remove HTML comments
         $markdown = preg_replace('/<!--.*?-->/s', '', $markdown);
-        
         return trim($markdown);
     }
     
-    /**
-     * Extract text paragraphs
-     */
     private static function extract_paragraphs($content) {
-        // Split by double newlines
         $parts = explode("\n\n", $content);
-        
         $paragraphs = array();
         foreach ($parts as $part) {
             $part = trim($part);
-            // Only keep substantial paragraphs (more than 50 characters)
             if (strlen($part) > 50 && !preg_match('/^#+/', $part)) {
                 $paragraphs[] = $part;
             }
         }
-        
         return $paragraphs;
     }
     
-    /**
-     * Search web for phrase/title
-     */
     public static function search_phrase($phrase) {
-        // Use Google Fact Check API first
         $api_key = get_option('ai_verify_google_factcheck_key');
-        
         if (!empty($api_key)) {
             $factchecks = self::search_google_factcheck($phrase, $api_key);
             if (!empty($factchecks)) {
-                return array(
-                    'success' => true,
-                    'source' => 'google_factcheck',
-                    'results' => $factchecks,
-                    'phrase' => $phrase
-                );
+                return array('success' => true, 'source' => 'google_factcheck', 'results' => $factchecks, 'phrase' => $phrase);
             }
         }
-        
-        // If no results, use web search through Claude
-        return array(
-            'success' => true,
-            'source' => 'web_search',
-            'phrase' => $phrase,
-            'requires_ai' => true
-        );
+        return array('success' => true, 'source' => 'web_search', 'phrase' => $phrase, 'requires_ai' => true);
     }
     
-    /**
-     * Search Google Fact Check API
-     */
     private static function search_google_factcheck($query, $api_key) {
-        $url = add_query_arg(array(
-            'key' => $api_key,
-            'query' => urlencode($query),
-            'languageCode' => 'en',
-            'pageSize' => 10
-        ), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
-        
+        $url = add_query_arg(array('key' => $api_key, 'query' => urlencode($query), 'languageCode' => 'en', 'pageSize' => 10), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
         $response = wp_remote_get($url, array('timeout' => 15));
-        
-        if (is_wp_error($response)) {
-            return array();
-        }
-        
+        if (is_wp_error($response)) { return array(); }
         $body = json_decode(wp_remote_retrieve_body($response), true);
-        
         $factchecks = array();
-        
         if (isset($body['claims']) && is_array($body['claims'])) {
             foreach ($body['claims'] as $claim) {
-                if (!isset($claim['claimReview'][0])) {
-                    continue;
-                }
-                
+                if (!isset($claim['claimReview'][0])) { continue; }
                 $review = $claim['claimReview'][0];
-                
                 $factchecks[] = array(
                     'claim' => isset($claim['text']) ? $claim['text'] : '',
                     'rating' => isset($review['textualRating']) ? $review['textualRating'] : '',
@@ -240,7 +215,7 @@ class AI_Verify_Factcheck_Scraper {
                 );
             }
         }
-        
         return $factchecks;
     }
 }
+
