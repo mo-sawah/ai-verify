@@ -861,7 +861,7 @@ Article: {$content}";
     /**
      * NEW: Analyze entire content with a single Perplexity call
      */
-    public static function analyze_with_single_call_perplexity($content, $context) {
+    public static function analyze_with_single_call_perplexity($content, $context, $combined_context) {
         $api_key = get_option('ai_verify_perplexity_key');
         if (empty($api_key)) {
             return new WP_Error('no_api_key', 'Perplexity API key not configured.');
@@ -869,10 +869,11 @@ Article: {$content}";
 
         error_log('AI Verify: Starting Single Call analysis with Perplexity.');
 
-        $prompt = "You are a professional, unbiased fact-checking journalist. Your task is to analyze the following article content in a single, comprehensive step. You must perform web searches to verify all factual claims.
+        $prompt = "You are a professional, unbiased fact-checking journalist. Your task is to analyze the following article content using the provided context from existing fact-checks and real-time web searches.
 
         Article Context (Title/URL): {$context}
         Article Content: {$content}
+        {$combined_context}
 
         Your mission is to return a complete fact-check report in a single, valid JSON object. The JSON should follow this exact structure:
         {
@@ -924,47 +925,27 @@ Article: {$content}";
             error_log('AI Verify: Perplexity single-call failed to return valid JSON. Body: ' . $body);
             return new WP_Error('json_error', 'AI failed to produce a valid JSON report.');
         }
-        
+
         return json_decode($matches[0], true);
     }
 
     /**
      * NEW: Analyze entire content with a single OpenRouter call
      */
-    public static function analyze_with_single_call_openrouter($content, $context) {
+    public static function analyze_with_single_call_openrouter($content, $context, $combined_context) {
         $api_key = get_option('ai_verify_openrouter_key');
         if (empty($api_key)) {
             return new WP_Error('no_api_key', 'OpenRouter API key not configured.');
         }
-        
+
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
         error_log('AI Verify: Starting Single Call analysis with OpenRouter.');
 
-        // First, try to get search results from Tavily using ONLY the article's title/context.
-        $web_results = self::search_web_tavily($context);
-
-        // If Tavily fails or returns no results, fallback to Firecrawl Search as a backup.
-        if (empty($web_results)) {
-            error_log('AI Verify: Tavily failed or returned no results. Falling back to Firecrawl Search.');
-            $web_results = self::search_web_firecrawl($context);
-        }
-
-        // If both methods fail, then we return an error.
-        if (empty($web_results)) {
-            error_log('AI Verify: All web search methods (Tavily and Firecrawl) failed.');
-            return new WP_Error('search_failed', 'Could not retrieve web search results from any provider to perform analysis.');
-        }
-
-        $web_context = "\n\n=== WEB SEARCH RESULTS ===\n";
-        foreach ($web_results as $idx => $result) {
-            $web_context .= "\n[Source " . ($idx + 1) . "] Title: {$result['title']}\nURL: {$result['url']}\nContent: " . substr($result['content'], 0, 500) . "...\n---\n";
-        }
-
-        $prompt = "You are a professional, unbiased fact-checking journalist. Your task is to analyze the following article content using ONLY the web search results provided.
+        $prompt = "You are a professional, unbiased fact-checking journalist. Your task is to analyze the following article content using ONLY the context provided from existing fact-checks and real-time web searches.
 
         Article Context (Title/URL): {$context}
         Article Content: {$content}
-        {$web_context}
+        {$combined_context}
 
         Your mission is to return a complete fact-check report in a single, valid JSON object. The JSON should follow this exact structure:
         {
@@ -983,8 +964,8 @@ Article: {$content}";
         }
 
         CRITICAL INSTRUCTIONS:
-        1.  Base your entire analysis STRICTLY on the web search results provided.
-        2.  Identify 5-10 of the most significant, verifiable claims.
+        1.  Base your entire analysis STRICTLY on the web search results and context provided.
+        2.  Identify 5-10 of the most significant, verifiable claims from the article.
         3.  Provide a clear rating and detailed explanation for each claim, citing sources like [Source 1], [Source 2], etc.
         4.  Populate the 'sources' array for each claim with the URLs from the web results you used.
         5.  Calculate an overall credibility score (0-100) and a final rating.
@@ -1006,7 +987,7 @@ Article: {$content}";
         ));
 
         if (is_wp_error($response)) {
-             error_log('AI Verify: OpenRouter single-call error: ' . $response->get_error_message());
+            error_log('AI Verify: OpenRouter single-call error: ' . $response->get_error_message());
             return $response;
         }
 

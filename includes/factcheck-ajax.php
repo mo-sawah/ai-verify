@@ -285,36 +285,65 @@ class AI_Verify_Factcheck_Ajax {
             // Step 2: ROUTING LOGIC - Choose analysis method
             if ($provider === 'single_call_perplexity' || $provider === 'single_call_openrouter') {
                 
-                // === NEW SINGLE CALL WORKFLOW ===
-                error_log("AI Verify: Using Single Call workflow with provider: $provider");
+                // === NEW "HYBRID" SINGLE CALL WORKFLOW ===
+                error_log("AI Verify: Using Hybrid Single Call workflow with provider: $provider");
                 
-                $result_data = null;
-                if ($provider === 'single_call_perplexity') {
-                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_perplexity($content, $context);
+                // Step A: Check Google Fact-Check API first
+                $google_key = get_option('ai_verify_google_factcheck_key');
+                $google_factcheck_context = '';
+                if (!empty($google_key)) {
+                    $google_result = AI_Verify_Factcheck_Analyzer::check_google_factcheck($context, $google_key);
+                    if ($google_result && !empty($google_result['explanation'])) {
+                         $google_factcheck_context = "\n\n=== EXISTING FACT-CHECK (Source: Google Fact Check API) ===\nClaim: {$google_result['explanation']}\nRating: {$google_result['rating']}\nSource: {$google_result['source']['name']} ({$google_result['source']['url']})\n---";
+                         error_log("AI Verify: Found existing fact-check via Google API.");
+                    }
+                }
+
+                // Step B: Get real-time web search results from Tavily (with Firecrawl fallback)
+                $web_results = AI_Verify_Factcheck_Analyzer::search_web_tavily($context);
+                if (empty($web_results)) {
+                    error_log('AI Verify: Tavily failed. Falling back to Firecrawl Search.');
+                    $web_results = AI_Verify_Factcheck_Analyzer::search_web_firecrawl($context);
+                }
+
+                $web_search_context = "\n\n=== REAL-TIME WEB SEARCH RESULTS ===\n";
+                if (!empty($web_results)) {
+                    foreach ($web_results as $idx => $result) {
+                        $web_search_context .= "[Source " . ($idx + 1) . "] Title: {$result['title']}\nURL: {$result['url']}\nContent: " . substr($result['content'], 0, 400) . "...\n---\n";
+                    }
                 } else {
-                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_openrouter($content, $context);
+                    $web_search_context .= "No real-time web search results were found.\n";
+                    error_log("AI Verify: Warning - No web search results found for single-call analysis.");
+                }
+
+                // Step C: Call the appropriate AI with the combined context
+                $result_data = null;
+                $combined_context = $google_factcheck_context . $web_search_context;
+
+                if ($provider === 'single_call_perplexity') {
+                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_perplexity($content, $context, $combined_context);
+                } else { // single_call_openrouter
+                    $result_data = AI_Verify_Factcheck_Analyzer::analyze_with_single_call_openrouter($content, $context, $combined_context);
                 }
 
                 if (is_wp_error($result_data)) {
                     throw new Exception($result_data->get_error_message());
                 }
                 
-                // Extract data from the single AI response
+                // Step D: Extract and save the data (same as before)
                 $factcheck_results = $result_data['factcheck_results'] ?? array();
                 $overall_score = $result_data['overall_score'] ?? 50;
                 $credibility_rating = $result_data['credibility_rating'] ?? 'Mixed Credibility';
                 $propaganda = $result_data['propaganda_techniques'] ?? array();
                 
-                // Collect sources from the results
                 $sources = array();
                 foreach ($factcheck_results as $result) {
                     if (!empty($result['sources'])) {
                         $sources = array_merge($sources, $result['sources']);
                     }
                 }
-                 $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
+                $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
 
-                // Save the final results directly
                 AI_Verify_Factcheck_Database::save_results(
                     $report_id,
                     $factcheck_results,
