@@ -395,6 +395,12 @@ class AI_Verify_Factcheck_Ajax {
             
             error_log("AI Verify: ✅ Completed successfully: $report_id");
 
+            // NEW: Trigger trends tracking
+            $report = AI_Verify_Factcheck_Database::get_report($report_id);
+            if ($report) {
+                do_action('ai_verify_report_completed', $report_id, $report);
+            }
+
         } catch (Exception $e) {
             error_log("AI Verify: ❌ Error processing report $report_id: " . $e->getMessage());
             AI_Verify_Factcheck_Database::update_status($report_id, 'failed');
