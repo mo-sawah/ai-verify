@@ -30,6 +30,10 @@ class AI_Verify_Intelligence_Dashboard {
         // Add this in the init() method, around line 30:
         add_action('wp_ajax_ai_verify_get_chart_data', array(__CLASS__, 'ajax_get_chart_data'));
         add_action('wp_ajax_nopriv_ai_verify_get_chart_data', array(__CLASS__, 'ajax_get_chart_data'));
+
+        // *** MAKE SURE THESE ARE HERE: ***
+        add_action('wp_ajax_ai_verify_dashboard_refresh', array(__CLASS__, 'ajax_refresh_dashboard'));
+        add_action('wp_ajax_ai_verify_dashboard_stats', array(__CLASS__, 'ajax_get_stats'));
         
         // Schedule velocity calculations (every 15 minutes)
         add_action('ai_verify_calculate_velocity', array(__CLASS__, 'scheduled_velocity_calculation'));
@@ -476,16 +480,30 @@ class AI_Verify_Intelligence_Dashboard {
     }
 
     /**
-     * AJAX: Get chart data
+     * AJAX: Get chart data (WITH DETAILED LOGGING)
      */
     public static function ajax_get_chart_data() {
-        check_ajax_referer('ai_verify_dashboard_nonce', 'nonce');
+        error_log('AI Verify: ajax_get_chart_data called');
+        
+        // Check nonce
+        $nonce_check = check_ajax_referer('ai_verify_dashboard_nonce', 'nonce', false);
+        error_log('AI Verify: Nonce check: ' . ($nonce_check ? 'PASSED' : 'FAILED'));
+        
+        if (!$nonce_check) {
+            error_log('AI Verify: Nonce verification failed!');
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
         
         $timeframe = sanitize_text_field($_POST['timeframe'] ?? '7days');
+        error_log('AI Verify: Timeframe: ' . $timeframe);
         
         global $wpdb;
         $table_trends = $wpdb->prefix . 'ai_verify_claim_trends';
         $table_instances = $wpdb->prefix . 'ai_verify_claim_instances';
+        $table_sources = $wpdb->prefix . 'ai_verify_claim_sources';
+        
+        error_log('AI Verify: Tables - Trends: ' . $table_trends . ', Instances: ' . $table_instances);
         
         // Get timeline data (last 7 days)
         $timeline = $wpdb->get_results("
@@ -498,6 +516,11 @@ class AI_Verify_Intelligence_Dashboard {
             ORDER BY date ASC
         ", ARRAY_A);
         
+        error_log('AI Verify: Timeline query returned ' . count($timeline) . ' rows');
+        if ($wpdb->last_error) {
+            error_log('AI Verify: Timeline SQL error: ' . $wpdb->last_error);
+        }
+        
         // Get category breakdown
         $categories = $wpdb->get_results("
             SELECT 
@@ -508,6 +531,8 @@ class AI_Verify_Intelligence_Dashboard {
             GROUP BY category
             ORDER BY count DESC
         ", ARRAY_A);
+        
+        error_log('AI Verify: Categories query returned ' . count($categories) . ' rows');
         
         // Get velocity data
         $velocity = $wpdb->get_results("
@@ -520,22 +545,36 @@ class AI_Verify_Intelligence_Dashboard {
             LIMIT 5
         ", ARRAY_A);
         
+        error_log('AI Verify: Velocity query returned ' . count($velocity) . ' rows');
+        
         // Get platform data
         $platforms = $wpdb->get_results("
             SELECT 
                 platform,
                 COUNT(*) as count
-            FROM {$wpdb->prefix}ai_verify_claim_sources
+            FROM $table_sources
             WHERE scraped_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
             GROUP BY platform
+            ORDER BY count DESC
         ", ARRAY_A);
         
-        wp_send_json_success(array(
+        error_log('AI Verify: Platforms query returned ' . count($platforms) . ' rows');
+        
+        $data = array(
             'timeline' => $timeline,
             'categories' => $categories,
             'velocity' => $velocity,
             'platforms' => $platforms
-        ));
+        );
+        
+        error_log('AI Verify: Sending chart data - ' . json_encode(array(
+            'timeline_count' => count($timeline),
+            'categories_count' => count($categories),
+            'velocity_count' => count($velocity),
+            'platforms_count' => count($platforms)
+        )));
+        
+        wp_send_json_success($data);
     }
 }
 

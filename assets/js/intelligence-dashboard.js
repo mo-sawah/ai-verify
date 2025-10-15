@@ -74,9 +74,6 @@
       console.log("AI Verify: No theme detected, defaulting to light");
     },
 
-    /**
-     * *** NEW METHOD: Load chart data via AJAX ***
-     */
     loadChartData: function () {
       const self = this;
 
@@ -93,18 +90,43 @@
         success: function (response) {
           console.log("Chart data response:", response);
 
-          if (response.success && typeof DashboardCharts !== "undefined") {
+          // *** FIXED: Check response structure correctly ***
+          if (response && response.success && response.data) {
+            console.log("Chart data received:", response.data);
+
             // Trigger custom event with data
             $(document).trigger("charts:dataLoaded", [response.data]);
 
             // Also directly call the chart initialization
-            DashboardCharts.initWithRealData(response.data);
+            if (typeof DashboardCharts !== "undefined") {
+              DashboardCharts.initWithRealData(response.data);
+            } else {
+              console.error("DashboardCharts is not defined!");
+            }
           } else {
-            console.error("Failed to load chart data:", response);
+            console.error("Invalid chart data response:", response);
+
+            // *** DEBUGGING: Show what's actually in the response ***
+            console.log("Response keys:", Object.keys(response || {}));
+            console.log("Has success?", "success" in (response || {}));
+            console.log("Has data?", "data" in (response || {}));
+
+            // *** Try with empty data to at least show chart structure ***
+            if (typeof DashboardCharts !== "undefined") {
+              console.warn("Initializing charts with empty data...");
+              DashboardCharts.initWithRealData({
+                timeline: [],
+                categories: [],
+                velocity: [],
+                platforms: [],
+              });
+            }
           }
         },
         error: function (xhr, status, error) {
           console.error("Chart data AJAX error:", error);
+          console.error("Status:", status);
+          console.error("Response:", xhr.responseText);
         },
       });
     },
