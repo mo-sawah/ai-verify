@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.39
+ * Version: 2.0.40
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.39');
+define('AI_VERIFY_VERSION', '2.0.40');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -115,6 +115,11 @@ class AI_Verify {
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/intelligence-dashboard.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/intelligence-dashboard.php';
         }
+
+        // Load background aggregator
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/background-aggregator.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/background-aggregator.php';
+        }
         
         // Load trends system files
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trends-database.php')) {
@@ -156,6 +161,11 @@ class AI_Verify {
         // Initialize fact-check system
         if (class_exists('AI_Verify_Factcheck_System')) {
             AI_Verify_Factcheck_System::init();
+        }
+
+        // Initialize Background Aggregator
+        if (class_exists('AI_Verify_Background_Aggregator')) {
+            AI_Verify_Background_Aggregator::init();
         }
         
         // Initialize trends system

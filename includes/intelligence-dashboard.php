@@ -119,77 +119,111 @@ class AI_Verify_Intelligence_Dashboard {
     }
     
     /**
-     * Get aggregated dashboard data
+     * Get aggregated dashboard data (OPTIMIZED - reads from background cache)
      */
     public static function get_dashboard_data($filters = array()) {
+        error_log('AI Verify: Loading dashboard from background cache...');
+        $start_time = microtime(true);
+        
         $category = isset($filters['category']) ? $filters['category'] : 'all';
         $platform = isset($filters['platform']) ? $filters['platform'] : 'all';
         $velocity = isset($filters['velocity']) ? $filters['velocity'] : 'all';
         $timeframe = isset($filters['timeframe']) ? $filters['timeframe'] : '7days';
         $search = isset($filters['search']) ? $filters['search'] : '';
         
-        // Get internal trends
-        $internal_claims = AI_Verify_Velocity_Tracker::get_viral_claims(50);
+        global $wpdb;
+        $table_trends = $wpdb->prefix . 'ai_verify_claim_trends';
+        $table_sources = $wpdb->prefix . 'ai_verify_claim_sources';
         
-        // Get RSS claims
-        if (class_exists('AI_Verify_RSS_Aggregator_Enhanced')) {
-            $rss_claims = AI_Verify_RSS_Aggregator_Enhanced::aggregate_all_feeds(5);
-        } else {
-            $rss_claims = array();
-        }
+        $all_claims = array();
         
-        // Get Twitter claims (if API key configured)
-        $twitter_claims = array();
-        if (get_option('ai_verify_twitter_api_key')) {
-            if (class_exists('AI_Verify_Twitter_Monitor')) {
-                $twitter_claims = AI_Verify_Twitter_Monitor::monitor_trending_topics();
-            }
-        }
-        
-        // Get Google Fact Check claims
-        $google_claims = array();
-        $google_key = get_option('ai_verify_google_factcheck_key');
-        if (!empty($google_key)) {
-            $google_claims = self::get_google_factcheck_claims($google_key);
-        }
-        
-        // Merge all sources
-        $all_claims = array_merge($internal_claims, $rss_claims, $twitter_claims, $google_claims);
-        
-        // Apply filters
-        if ($category !== 'all') {
-            $all_claims = array_filter($all_claims, function($claim) use ($category) {
-                return isset($claim['category']) && $claim['category'] === $category;
-            });
-        }
-        
-        if ($platform !== 'all') {
-            $all_claims = array_filter($all_claims, function($claim) use ($platform) {
-                return isset($claim['platform']) && $claim['platform'] === $platform;
-            });
-        }
+        // 1. Get internal trends (fast - from database)
+        $internal_query = "SELECT * FROM $table_trends WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
         
         if ($velocity !== 'all') {
-            $all_claims = array_filter($all_claims, function($claim) use ($velocity) {
-                return isset($claim['velocity_status']) && $claim['velocity_status'] === $velocity;
-            });
+            $internal_query .= $wpdb->prepare(" AND velocity_status = %s", $velocity);
         }
         
+        if ($category !== 'all') {
+            $internal_query .= $wpdb->prepare(" AND category = %s", $category);
+        }
+        
+        $internal_query .= " ORDER BY velocity_score DESC, check_count DESC LIMIT 50";
+        
+        $internal_claims = $wpdb->get_results($internal_query, ARRAY_A);
+        
+        // Format internal claims
+        foreach ($internal_claims as &$claim) {
+            $claim['platform'] = 'internal';
+            $claim['claim'] = $claim['claim_text'];
+            $claim['date'] = $claim['last_seen'];
+            $claim['source'] = 'User Checks';
+            $claim['rating'] = self::calculate_rating_from_score($claim['avg_credibility_score']);
+        }
+        
+        // 2. Get external sources (from background-aggregated data)
+        $sources_query = "SELECT * FROM $table_sources WHERE scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)";
+        
+        if ($platform !== 'all') {
+            $sources_query .= $wpdb->prepare(" AND platform = %s", $platform);
+        }
+        
+        $sources_query .= " ORDER BY scraped_at DESC LIMIT 100";
+        
+        $external_sources = $wpdb->get_results($sources_query, ARRAY_A);
+        
+        // Format external sources
+        $external_claims = array();
+        foreach ($external_sources as $source) {
+            $metadata = json_decode($source['metadata'], true);
+            
+            $external_claims[] = array(
+                'claim' => $source['source_title'],
+                'platform' => $source['platform'],
+                'source' => $source['author_handle'],
+                'url' => $source['source_url'],
+                'date' => $source['posted_at'],
+                'category' => $metadata['category'] ?? 'general',
+                'rating' => $metadata['rating'] ?? 'Unknown',
+                'description' => $metadata['description'] ?? '',
+                'engagement_count' => $source['engagement_count'],
+                'velocity_status' => 'external',
+                'velocity_score' => $source['engagement_count'] / 10 // Simple calculation
+            );
+        }
+        
+        // Merge internal and external
+        $all_claims = array_merge($internal_claims, $external_claims);
+        
+        // Apply search filter
         if (!empty($search)) {
             $all_claims = array_filter($all_claims, function($claim) use ($search) {
-                $claim_text = isset($claim['claim']) ? $claim['claim'] : ($claim['claim_text'] ?? '');
-                return stripos($claim_text, $search) !== false;
+                return stripos($claim['claim'], $search) !== false;
             });
         }
         
-        // Sort by velocity score (highest first)
+        // Sort by velocity score
         usort($all_claims, function($a, $b) {
             $score_a = isset($a['velocity_score']) ? floatval($a['velocity_score']) : 0;
             $score_b = isset($b['velocity_score']) ? floatval($b['velocity_score']) : 0;
             return $score_b <=> $score_a;
         });
         
+        $elapsed = round(microtime(true) - $start_time, 2);
+        error_log("AI Verify: Dashboard loaded in {$elapsed}s (" . count($all_claims) . " claims)");
+        
         return $all_claims;
+    }
+
+    /**
+     * Calculate rating from credibility score
+     */
+    private static function calculate_rating_from_score($score) {
+        if ($score >= 80) return 'True';
+        if ($score >= 60) return 'Mostly True';
+        if ($score >= 40) return 'Mixed';
+        if ($score >= 20) return 'Mostly False';
+        return 'False';
     }
     
     /**

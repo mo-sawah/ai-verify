@@ -210,6 +210,52 @@ class AI_Verify_Settings {
                             </p>
                         </td>
                     </tr>
+
+                    <tr><th colspan="2"><h2>🔄 Background Processing</h2></th></tr>
+                    <tr>
+                        <th scope="row"><label>Cron Jobs Status</label></th>
+                        <td>
+                            <?php
+                            $last_rss = get_option('ai_verify_last_rss_run', 'Never');
+                            $last_google = get_option('ai_verify_last_google_run', 'Never');
+                            $last_twitter = get_option('ai_verify_last_twitter_run', 'Never');
+                            $last_velocity = get_option('ai_verify_last_velocity_run', 'Never');
+                            ?>
+                            <p><strong>📰 RSS Aggregation:</strong> Last run <?php echo $last_rss; ?></p>
+                            <p><strong>🔍 Google Fact Check:</strong> Last run <?php echo $last_google; ?></p>
+                            <p><strong>🐦 Twitter Monitor:</strong> Last run <?php echo $last_twitter; ?></p>
+                            <p><strong>⚡ Velocity Calculation:</strong> Last run <?php echo $last_velocity; ?></p>
+                            
+                            <p>
+                                <button type="button" id="runBackgroundJobs" class="button button-secondary">
+                                    🔄 Run All Jobs Now
+                                </button>
+                                <span id="jobsStatus"></span>
+                            </p>
+                            
+                            <script>
+                            jQuery(document).ready(function($) {
+                                $('#runBackgroundJobs').on('click', function() {
+                                    var btn = $(this);
+                                    btn.prop('disabled', true).text('⏳ Running...');
+                                    
+                                    $.post(ajaxurl, {
+                                        action: 'ai_verify_run_background_jobs',
+                                        nonce: '<?php echo wp_create_nonce('ai_verify_background'); ?>'
+                                    }, function(response) {
+                                        if (response.success) {
+                                            $('#jobsStatus').html('<span style="color: green;">✅ All jobs completed!</span>');
+                                            setTimeout(function() { location.reload(); }, 2000);
+                                        } else {
+                                            $('#jobsStatus').html('<span style="color: red;">❌ Error: ' + response.data + '</span>');
+                                        }
+                                        btn.prop('disabled', false).text('🔄 Run All Jobs Now');
+                                    });
+                                });
+                            });
+                            </script>
+                        </td>
+                    </tr>
                     
                     <tr>
                         <th scope="row"><label for="ai_verify_openrouter_key">OpenRouter API Key (Fallback)</label></th>

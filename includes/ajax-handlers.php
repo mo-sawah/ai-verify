@@ -15,6 +15,9 @@ class AI_Verify_Ajax {
         
         add_action('wp_ajax_ai_verify_get_factchecks', array(__CLASS__, 'get_fact_checks'));
         add_action('wp_ajax_nopriv_ai_verify_get_factchecks', array(__CLASS__, 'get_fact_checks'));
+        
+        // NEW: Background jobs handler
+        add_action('wp_ajax_ai_verify_run_background_jobs', array(__CLASS__, 'run_background_jobs'));
     }
     
     public static function handle_chat() {
@@ -136,7 +139,7 @@ class AI_Verify_Ajax {
             'key' => $api_key,
             'query' => urlencode($query),
             'languageCode' => 'en',
-            'pageSize' => 10  // Get more results to filter
+            'pageSize' => 10
         ), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
         
         error_log('AI Verify: Calling URL: ' . $url);
@@ -206,6 +209,25 @@ class AI_Verify_Ajax {
             return floor($diff / 604800) . ' weeks ago';
         } else {
             return date('M j, Y', $timestamp);
+        }
+    }
+    
+    /**
+     * Run background jobs manually (NEW METHOD)
+     */
+    public static function run_background_jobs() {
+        check_ajax_referer('ai_verify_background', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+        
+        if (class_exists('AI_Verify_Background_Aggregator')) {
+            $result = AI_Verify_Background_Aggregator::run_all_now();
+            wp_send_json_success($result);
+        } else {
+            wp_send_json_error('Background Aggregator class not found');
         }
     }
 }
