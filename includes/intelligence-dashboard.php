@@ -48,62 +48,66 @@ class AI_Verify_Intelligence_Dashboard {
         }
     }
     
-    
     /**
      * Enqueue dashboard assets
      */
-    public static function enqueue_assets($hook) {
-        // Only load on our dashboard page
-        if (strpos($hook, 'ai-verify-intelligence') === false) {
+    public static function enqueue_assets() {
+        global $post;
+        
+        if (!is_a($post, 'WP_Post') || !has_shortcode($post->post_content, 'ai_verify_intelligence_dashboard')) {
             return;
         }
-    // ========================================
-    // STEP 1: Load Chart.js library FIRST
-    // ========================================
-    wp_enqueue_script(
-        'ai-verify-chartjs-lib',
-        'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js',
-        array(),
-        '4.4.0',
-        true
-    );
+        
+        // FIXED VERSION:
+        wp_enqueue_script(
+            'ai-verify-chartjs',
+            'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js',
+            array(),
+            '4.4.0',
+            true
+        );
 
-    // ========================================
-    // STEP 2: Load OUR Chart.js wrapper (depends on Chart.js library)
-    // ========================================
-    wp_enqueue_script(
-        'ai-verify-charts',
-        AI_VERIFY_PLUGIN_URL . 'assets/js/Chart.js',
-        array('jquery', 'ai-verify-chartjs-lib'), // *** CRITICAL: Depends on Chart.js lib ***
-        AI_VERIFY_VERSION,
-        true
-    );
-
-    // ========================================
-    // STEP 3: Load Dashboard JS (depends on BOTH jQuery AND our Chart wrapper)
-    // ========================================
-    wp_enqueue_script(
-        'ai-verify-intelligence-dashboard',
-        AI_VERIFY_PLUGIN_URL . 'assets/js/intelligence-dashboard.js',
-        array('jquery', 'ai-verify-charts'), // *** CRITICAL: Depends on our Chart wrapper ***
-        AI_VERIFY_VERSION,
-        true
-    );
-
-    // Localize script with AJAX data
-    wp_localize_script('ai-verify-intelligence-dashboard', 'aiVerifyDashboard', array(
-        'ajax_url' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('ai_verify_dashboard_nonce'),
-        'plugin_url' => AI_VERIFY_PLUGIN_URL
-    ));
-
-    // Enqueue CSS
-    wp_enqueue_style(
-        'ai-verify-intelligence-dashboard',
-        AI_VERIFY_PLUGIN_URL . 'assets/css/intelligence-dashboard.css',
-        array(),
-        AI_VERIFY_VERSION
-    );
+        wp_enqueue_script(
+            'ai-verify-intelligence-dashboard',
+            AI_VERIFY_PLUGIN_URL . 'assets/js/intelligence-dashboard.js',
+            array('jquery', 'ai-verify-chartjs'), // IMPORTANT: Add dependency
+            AI_VERIFY_VERSION,
+            true
+        );
+        
+        // Dashboard CSS
+        wp_enqueue_style(
+            'ai-verify-intelligence-dashboard',
+            AI_VERIFY_PLUGIN_URL . 'assets/css/intelligence-dashboard.css',
+            array(),
+            AI_VERIFY_VERSION
+        );
+        
+        // Dashboard JS
+        wp_enqueue_script(
+            'ai-verify-intelligence-dashboard',
+            AI_VERIFY_PLUGIN_URL . 'assets/js/intelligence-dashboard.js',
+            array('jquery', 'chartjs'),
+            AI_VERIFY_VERSION,
+            true
+        );
+        
+        // Dashboard Charts
+        wp_enqueue_script(
+            'ai-verify-dashboard-charts',
+            AI_VERIFY_PLUGIN_URL . 'assets/js/dashboard-charts.js',
+            array('jquery', 'chartjs'),
+            AI_VERIFY_VERSION,
+            true
+        );
+        
+        // Localize script
+        wp_localize_script('ai-verify-intelligence-dashboard', 'aiVerifyDashboard', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('ai_verify_dashboard_nonce'),
+            'refresh_interval' => 60000, // 1 minute
+            'theme_class' => self::detect_theme_class()
+        ));
     }
     
     /**
