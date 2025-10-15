@@ -11,12 +11,9 @@ class AI_Verify_RSS_Aggregator_Enhanced {
     
     private static $cache_duration = 1800; // 30 minutes
     
-    /**
-     * All RSS feed sources
-     */
     private static function get_feed_sources() {
         return array(
-            // Original sources
+            // WORKING SOURCES - KEEP
             'politifact' => array(
                 'name' => 'PolitiFact',
                 'url' => 'https://www.politifact.com/rss/all/',
@@ -32,31 +29,17 @@ class AI_Verify_RSS_Aggregator_Enhanced {
                 'url' => 'https://www.factcheck.org/feed/',
                 'category' => 'politics'
             ),
-            'afp' => array(
-                'name' => 'AFP Fact Check',
-                'url' => 'https://factcheck.afp.com/afp-fact-check/list/rss',
-                'category' => 'general'
-            ),
             'fullfact' => array(
                 'name' => 'Full Fact',
                 'url' => 'https://fullfact.org/feed/',
                 'category' => 'general'
             ),
             
-            // NEW SOURCES
-            'reuters' => array(
-                'name' => 'Reuters Fact Check',
-                'url' => 'https://www.reuters.com/news/archive/factcheck',
-                'category' => 'general'
-            ),
-            'apnews' => array(
-                'name' => 'AP Fact Check',
-                'url' => 'https://apnews.com/hub/ap-fact-check',
-                'category' => 'general'
-            ),
-            'usatoday' => array(
-                'name' => 'USA Today Fact Check',
-                'url' => 'https://www.usatoday.com/news/factcheck/',
+            // TEMPORARILY DISABLED - TIMEOUT ISSUES
+            /*
+            'afp' => array(
+                'name' => 'AFP Fact Check',
+                'url' => 'https://factcheck.afp.com/afp-fact-check/list/rss',
                 'category' => 'general'
             ),
             'washington_post' => array(
@@ -69,29 +52,12 @@ class AI_Verify_RSS_Aggregator_Enhanced {
                 'url' => 'https://leadstories.com/rss/',
                 'category' => 'general'
             ),
-            'science_feedback' => array(
-                'name' => 'Science Feedback',
-                'url' => 'https://sciencefeedback.co/feed/',
-                'category' => 'health'
-            ),
-            'health_feedback' => array(
-                'name' => 'Health Feedback',
-                'url' => 'https://healthfeedback.org/feed/',
-                'category' => 'health'
-            ),
-            'climate_feedback' => array(
-                'name' => 'Climate Feedback',
-                'url' => 'https://climatefeedback.org/feed/',
-                'category' => 'climate'
-            ),
+            */
+            
+            // ADD THESE - THEY'RE MORE RELIABLE
             'check_your_fact' => array(
                 'name' => 'Check Your Fact',
                 'url' => 'https://checkyourfact.com/feed/',
-                'category' => 'general'
-            ),
-            'truth_or_fiction' => array(
-                'name' => 'Truth or Fiction',
-                'url' => 'https://www.truthorfiction.com/feed/',
                 'category' => 'general'
             )
         );
@@ -153,7 +119,11 @@ class AI_Verify_RSS_Aggregator_Enhanced {
      * Parse individual RSS feed
      */
     private static function parse_feed($feed_url, $source_name, $category) {
-        $response = wp_remote_get($feed_url, array('timeout' => 15));
+        $response = wp_remote_get($feed_url, array(
+            'timeout' => 5,
+            'sslverify' => false,  // Helps with some SSL issues
+            'user-agent' => 'Mozilla/5.0 (compatible; WordPress/' . get_bloginfo('version') . '; +' . home_url() . ')'
+        ));
         
         if (is_wp_error($response)) {
             error_log('AI Verify RSS: Failed to fetch ' . $source_name . ': ' . $response->get_error_message());
@@ -161,12 +131,25 @@ class AI_Verify_RSS_Aggregator_Enhanced {
         }
         
         $body = wp_remote_retrieve_body($response);
-        
+
+        // Clean up the XML first
+        $body = preg_replace('/[^\x{0009}\x{000a}\x{000d}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $body);
+        $body = trim($body);
+
+        // Remove BOM if present
+        $body = str_replace("\xEF\xBB\xBF", '', $body);
+
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($body);
-        
+        $xml = @simplexml_load_string($body, 'SimpleXMLElement', LIBXML_NOCDATA);
+
         if (!$xml) {
-            error_log('AI Verify RSS: Failed to parse XML from ' . $source_name);
+            $errors = libxml_get_errors();
+            if (!empty($errors)) {
+                error_log('AI Verify RSS: Failed to parse XML from ' . $source_name . ' - ' . $errors[0]->message);
+            } else {
+                error_log('AI Verify RSS: Failed to parse XML from ' . $source_name);
+            }
+            libxml_clear_errors();
             return array();
         }
         

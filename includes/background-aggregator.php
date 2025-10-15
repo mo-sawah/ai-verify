@@ -46,7 +46,7 @@ class AI_Verify_Background_Aggregator {
     }
     
     /**
-     * Aggregate RSS Feeds (Runs every 30 min)
+     * Aggregate RSS Feeds (Runs every 30 min) - IMPROVED ERROR HANDLING
      */
     public static function aggregate_rss_feeds() {
         error_log('AI Verify: [CRON] Starting RSS aggregation...');
@@ -60,8 +60,19 @@ class AI_Verify_Background_Aggregator {
         // Clear cache to force fresh fetch
         AI_Verify_RSS_Aggregator_Enhanced::clear_cache();
         
-        // Fetch fresh RSS data
-        $claims = AI_Verify_RSS_Aggregator_Enhanced::aggregate_all_feeds(5);
+        // Fetch fresh RSS data with error handling
+        try {
+            $claims = AI_Verify_RSS_Aggregator_Enhanced::aggregate_all_feeds(3); // Reduced from 5 to 3
+        } catch (Exception $e) {
+            error_log('AI Verify: RSS aggregation exception: ' . $e->getMessage());
+            $claims = array();
+        }
+        
+        if (empty($claims)) {
+            error_log('AI Verify: [CRON] No RSS claims fetched, skipping storage');
+            update_option('ai_verify_last_rss_run', current_time('mysql'));
+            return;
+        }
         
         // Store in database for quick retrieval
         global $wpdb;
@@ -69,41 +80,52 @@ class AI_Verify_Background_Aggregator {
         
         $stored_count = 0;
         foreach ($claims as $claim) {
-            // Check if already exists
+            // Skip if missing required fields
+            if (empty($claim['url']) || empty($claim['claim'])) {
+                continue;
+            }
+            
+            // Check if already exists (last 7 days)
             $exists = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table_sources WHERE source_url = %s AND scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)",
+                "SELECT id FROM $table_sources WHERE source_url = %s AND scraped_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
                 $claim['url']
             ));
             
             if (!$exists) {
                 // Store new claim
-                $wpdb->insert(
+                $insert_result = $wpdb->insert(
                     $table_sources,
                     array(
-                        'trend_id' => 0, // Will link later if matched
+                        'trend_id' => 0,
                         'platform' => 'rss',
                         'source_url' => $claim['url'],
-                        'source_title' => $claim['claim'],
+                        'source_title' => substr($claim['claim'], 0, 500), // Limit length
                         'author_handle' => $claim['source'],
                         'posted_at' => $claim['date'],
                         'scraped_at' => current_time('mysql'),
                         'metadata' => json_encode(array(
-                            'rating' => $claim['rating'],
-                            'category' => $claim['category'],
-                            'description' => $claim['description'] ?? ''
+                            'rating' => $claim['rating'] ?? 'Unknown',
+                            'category' => $claim['category'] ?? 'general',
+                            'description' => isset($claim['description']) ? substr($claim['description'], 0, 500) : ''
                         ))
                     ),
                     array('%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
                 );
-                $stored_count++;
+                
+                if ($insert_result) {
+                    $stored_count++;
+                } else {
+                    error_log('AI Verify: Failed to store RSS claim: ' . $wpdb->last_error);
+                }
             }
         }
         
         $elapsed = round(microtime(true) - $start_time, 2);
-        error_log("AI Verify: [CRON] RSS aggregation complete: {$stored_count} new claims stored in {$elapsed}s");
+        error_log("AI Verify: [CRON] RSS aggregation complete: {$stored_count} new claims stored in {$elapsed}s (from " . count($claims) . " fetched)");
         
         // Update last run timestamp
         update_option('ai_verify_last_rss_run', current_time('mysql'));
+        update_option('ai_verify_last_rss_count', $stored_count);
     }
     
     /**
