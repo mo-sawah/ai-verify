@@ -1,5 +1,5 @@
 /**
- * Dashboard Charts using Chart.js
+ * Dashboard Charts using Chart.js with REAL DATA
  */
 
 (function ($) {
@@ -7,27 +7,20 @@
 
   const DashboardCharts = {
     charts: {},
+    theme: {},
 
-    /**
-     * Initialize all charts
-     */
     init: function () {
       console.log("AI Verify: Initializing charts");
 
-      // Detect theme for chart colors
       const isDark = $("body").hasClass("s-dark");
       this.setTheme(isDark);
 
-      // Initialize each chart
-      this.initTimelineChart();
-      this.initCategoryChart();
-      this.initVelocityChart();
-      this.initPlatformChart();
+      // Wait for data to be loaded
+      $(document).on("charts:dataLoaded", (e, data) => {
+        this.initWithRealData(data);
+      });
     },
 
-    /**
-     * Set chart theme
-     */
     setTheme: function (isDark) {
       this.theme = {
         textColor: isDark ? "#cbd5e1" : "#475569",
@@ -35,45 +28,58 @@
         backgroundColor: isDark ? "#1e293b" : "#ffffff",
       };
 
-      // Set Chart.js defaults
       if (typeof Chart !== "undefined") {
         Chart.defaults.color = this.theme.textColor;
         Chart.defaults.borderColor = this.theme.gridColor;
       }
     },
 
-    /**
-     * Timeline Chart - Claims over time
-     */
-    initTimelineChart: function () {
+    initWithRealData: function (data) {
+      if (!data) {
+        console.error("No chart data provided");
+        return;
+      }
+
+      this.initTimelineChart(data.timeline || []);
+      this.initCategoryChart(data.categories || []);
+      this.initVelocityChart(data.velocity || []);
+      this.initPlatformChart(data.platforms || []);
+    },
+
+    initTimelineChart: function (timelineData) {
       const ctx = document.getElementById("timelineChart");
       if (!ctx) return;
 
-      // Sample data - replace with AJAX call
-      const data = {
-        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        datasets: [
-          {
-            label: "Claims",
-            data: [12, 19, 15, 25, 22, 30, 28],
-            borderColor: "#3b82f6",
-            backgroundColor: "rgba(59, 130, 246, 0.1)",
-            tension: 0.4,
-            fill: true,
-          },
-        ],
-      };
+      const labels = timelineData.map((item) => {
+        const date = new Date(item.date);
+        return date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+      });
+
+      const counts = timelineData.map((item) => parseInt(item.count));
 
       this.charts.timeline = new Chart(ctx, {
         type: "line",
-        data: data,
+        data: {
+          labels: labels.length ? labels : ["No data"],
+          datasets: [
+            {
+              label: "Claims",
+              data: counts.length ? counts : [0],
+              borderColor: "#3b82f6",
+              backgroundColor: "rgba(59, 130, 246, 0.1)",
+              tension: 0.4,
+              fill: true,
+            },
+          ],
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: {
-              display: false,
-            },
+            legend: { display: false },
             tooltip: {
               mode: "index",
               intersect: false,
@@ -82,54 +88,41 @@
           scales: {
             y: {
               beginAtZero: true,
-              grid: {
-                color: this.theme.gridColor,
-              },
+              grid: { color: this.theme.gridColor },
             },
             x: {
-              grid: {
-                display: false,
-              },
+              grid: { display: false },
             },
           },
         },
       });
     },
 
-    /**
-     * Category Breakdown - Pie chart
-     */
-    initCategoryChart: function () {
+    initCategoryChart: function (categoryData) {
       const ctx = document.getElementById("categoryChart");
       if (!ctx) return;
 
-      const data = {
-        labels: [
-          "Politics",
-          "Health",
-          "Climate",
-          "Technology",
-          "Crime",
-          "Other",
-        ],
-        datasets: [
-          {
-            data: [35, 25, 15, 12, 8, 5],
-            backgroundColor: [
-              "#3b82f6",
-              "#10b981",
-              "#f59e0b",
-              "#8b5cf6",
-              "#ef4444",
-              "#6b7280",
-            ],
-          },
-        ],
-      };
+      const labels = categoryData.map((item) => item.category || "Unknown");
+      const counts = categoryData.map((item) => parseInt(item.count));
 
       this.charts.category = new Chart(ctx, {
         type: "doughnut",
-        data: data,
+        data: {
+          labels: labels.length ? labels : ["No data"],
+          datasets: [
+            {
+              data: counts.length ? counts : [1],
+              backgroundColor: [
+                "#3b82f6",
+                "#10b981",
+                "#f59e0b",
+                "#8b5cf6",
+                "#ef4444",
+                "#6b7280",
+              ],
+            },
+          ],
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -146,117 +139,84 @@
       });
     },
 
-    /**
-     * Velocity Chart - Top viral claims
-     */
-    initVelocityChart: function () {
+    initVelocityChart: function (velocityData) {
       const ctx = document.getElementById("velocityChart");
       if (!ctx) return;
 
-      const data = {
-        labels: ["Claim 1", "Claim 2", "Claim 3", "Claim 4", "Claim 5"],
-        datasets: [
-          {
-            label: "Velocity Score",
-            data: [85, 72, 68, 55, 48],
-            backgroundColor: [
-              "#ef4444",
-              "#f59e0b",
-              "#f59e0b",
-              "#3b82f6",
-              "#3b82f6",
-            ],
-          },
-        ],
-      };
+      const labels = velocityData.map((item) =>
+        item.claim_text ? item.claim_text.substring(0, 30) + "..." : "Unknown"
+      );
+      const scores = velocityData.map(
+        (item) => parseFloat(item.velocity_score) || 0
+      );
 
       this.charts.velocity = new Chart(ctx, {
         type: "bar",
-        data: data,
+        data: {
+          labels: labels.length ? labels : ["No data"],
+          datasets: [
+            {
+              label: "Velocity Score",
+              data: scores.length ? scores : [0],
+              backgroundColor: scores.map((score) => {
+                if (score >= 50) return "#ef4444";
+                if (score >= 20) return "#f59e0b";
+                return "#3b82f6";
+              }),
+            },
+          ],
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           indexAxis: "y",
-          plugins: {
-            legend: {
-              display: false,
-            },
-          },
+          plugins: { legend: { display: false } },
           scales: {
             x: {
               beginAtZero: true,
               max: 100,
-              grid: {
-                color: this.theme.gridColor,
-              },
+              grid: { color: this.theme.gridColor },
             },
-            y: {
-              grid: {
-                display: false,
-              },
-            },
+            y: { grid: { display: false } },
           },
         },
       });
     },
 
-    /**
-     * Platform Distribution - Bar chart
-     */
-    initPlatformChart: function () {
+    initPlatformChart: function (platformData) {
       const ctx = document.getElementById("platformChart");
       if (!ctx) return;
 
-      const data = {
-        labels: ["Twitter", "Facebook", "RSS", "Google", "TikTok"],
-        datasets: [
-          {
-            label: "Claims",
-            data: [45, 30, 15, 7, 3],
-            backgroundColor: "#3b82f6",
-          },
-        ],
-      };
+      const labels = platformData.map((item) => item.platform || "Unknown");
+      const counts = platformData.map((item) => parseInt(item.count));
 
       this.charts.platform = new Chart(ctx, {
         type: "bar",
-        data: data,
+        data: {
+          labels: labels.length ? labels : ["No data"],
+          datasets: [
+            {
+              label: "Claims",
+              data: counts.length ? counts : [0],
+              backgroundColor: "#3b82f6",
+            },
+          ],
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: false,
-            },
-          },
+          plugins: { legend: { display: false } },
           scales: {
             y: {
               beginAtZero: true,
-              grid: {
-                color: this.theme.gridColor,
-              },
+              grid: { color: this.theme.gridColor },
             },
-            x: {
-              grid: {
-                display: false,
-              },
-            },
+            x: { grid: { display: false } },
           },
         },
       });
     },
-
-    /**
-     * Update chart data (for real-time updates)
-     */
-    updateChart: function (chartName, newData) {
-      if (this.charts[chartName]) {
-        this.charts[chartName].data = newData;
-        this.charts[chartName].update();
-      }
-    },
   };
 
-  // Expose globally
   window.DashboardCharts = DashboardCharts;
 })(jQuery);

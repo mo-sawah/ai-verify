@@ -482,7 +482,7 @@ canvas {
 
 .action-btn {
   flex: 1;
-  padding: 0px 16px;
+  padding: 0;
   background: var(--bg-tertiary);
   border: 2px solid transparent;
   border-radius: 8px;
@@ -855,7 +855,7 @@ html {
 
 .action-btn {
   flex: 1;
-  padding: 0px 16px;
+  padding: 0;
   background: #d1d9e1;
   border: 2px solid transparent;
   border-radius: 8px;
@@ -869,6 +869,7 @@ html {
   justify-content: center;
   gap: 8px;
   text-decoration: none;
+  text-transform: uppercase;
 }
 
 .action-btn:hover {

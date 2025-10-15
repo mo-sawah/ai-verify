@@ -2,16 +2,13 @@
  * Intelligence Dashboard JavaScript
  * Handles interactivity, real-time updates, and theme detection
  */
-
 (function ($) {
   "use strict";
-
   const Dashboard = {
     // State
     currentPage: 1,
     itemsPerPage: 20,
     totalClaims: 0,
-
     // State
     filters: {
       category: "all",
@@ -40,6 +37,9 @@
 
       // Load stats
       this.loadStats();
+
+      // *** NEW: Load chart data ***
+      this.loadChartData();
 
       // Start auto-refresh (every 60 seconds)
       this.startAutoRefresh();
@@ -75,6 +75,41 @@
     },
 
     /**
+     * *** NEW METHOD: Load chart data via AJAX ***
+     */
+    loadChartData: function () {
+      const self = this;
+
+      console.log("AI Verify: Loading chart data...");
+
+      $.ajax({
+        url: aiVerifyDashboard.ajax_url,
+        type: "POST",
+        data: {
+          action: "ai_verify_get_chart_data",
+          nonce: aiVerifyDashboard.nonce,
+          timeframe: self.filters.timeframe,
+        },
+        success: function (response) {
+          console.log("Chart data response:", response);
+
+          if (response.success && typeof DashboardCharts !== "undefined") {
+            // Trigger custom event with data
+            $(document).trigger("charts:dataLoaded", [response.data]);
+
+            // Also directly call the chart initialization
+            DashboardCharts.initWithRealData(response.data);
+          } else {
+            console.error("Failed to load chart data:", response);
+          }
+        },
+        error: function (xhr, status, error) {
+          console.error("Chart data AJAX error:", error);
+        },
+      });
+    },
+
+    /**
      * Setup event listeners (FIXED)
      */
     setupEventListeners: function () {
@@ -99,6 +134,11 @@
         console.log("Current filters:", self.filters);
 
         self.loadData();
+
+        // *** NEW: Reload charts when timeframe changes ***
+        if (filterType === "timeframe") {
+          self.loadChartData();
+        }
       });
 
       // Filter chips (FIXED)
@@ -134,6 +174,7 @@
         $(this).addClass("spinning");
         self.loadData();
         self.loadStats();
+        self.loadChartData(); // *** NEW: Also refresh charts ***
 
         setTimeout(function () {
           $("#refreshButton").removeClass("spinning");
@@ -223,15 +264,15 @@
 
       if (remaining > 0) {
         const buttonHtml = `
-            <div class="load-more-wrapper" style="text-align: center; padding: 30px;">
-                <button id="loadMoreBtn" class="load-more-btn">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
-                    </svg>
-                    Load More (${remaining} remaining)
-                </button>
-            </div>
-        `;
+        <div class="load-more-wrapper" style="text-align: center; padding: 30px;">
+            <button id="loadMoreBtn" class="load-more-btn">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                </svg>
+                Load More (${remaining} remaining)
+            </button>
+        </div>
+    `;
         $("#claimsGrid").append(buttonHtml);
 
         // Add click handler
@@ -277,16 +318,16 @@
 
       if (!claims || claims.length === 0) {
         $grid.html(`
-            <div class="empty-state">
-                <div class="empty-icon">
-                    <svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
-                    </svg>
-                </div>
-                <h3 class="empty-title">No Claims Found</h3>
-                <p class="empty-message">Try adjusting your filters or search terms</p>
+        <div class="empty-state">
+            <div class="empty-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
+                </svg>
             </div>
-        `);
+            <h3 class="empty-title">No Claims Found</h3>
+            <p class="empty-message">Try adjusting your filters or search terms</p>
+        </div>
+    `);
         return;
       }
 
@@ -297,11 +338,6 @@
       });
 
       $grid.html(html);
-
-      // Initialize charts with this data
-      if (typeof DashboardCharts !== "undefined") {
-        DashboardCharts.initWithData(claims);
-      }
     },
 
     /**
@@ -378,88 +414,66 @@
       const categoryIcon = categoryIcons[category] || categoryIcons["general"];
 
       return `
-        <div class="claim-card" data-claim-id="${index}" data-platform="${platform}" data-category="${category}" data-velocity="${velocityStatus}">
-            <div class="claim-card-header">
-                <div class="claim-badges">
-                    ${velocityBadge}
-                    <span class="badge badge-category">${categoryIcon} ${this.capitalizeFirst(
+    <div class="claim-card" data-claim-id="${index}" data-platform="${platform}" data-category="${category}" data-velocity="${velocityStatus}">
+        <div class="claim-card-header">
+            <div class="claim-badges">
+                ${velocityBadge}
+                <span class="badge badge-category">${categoryIcon} ${this.capitalizeFirst(
         category
       )}</span>
-                </div>
-                <div class="claim-rating ${ratingClass}">
-                    ${rating}
-                </div>
             </div>
-            
-            <div class="claim-text">${this.escapeHtml(claimText)}</div>
-            
+            <div class="claim-rating ${ratingClass}">
+                ${rating}
+            </div>
+        </div>
+        
+        <div class="claim-text">${this.escapeHtml(claimText)}</div>
+        
+        ${
+          claim.description
+            ? `<div class="claim-description">${this.escapeHtml(
+                claim.description
+              )}</div>`
+            : ""
+        }
+        
+        <div class="claim-metrics">
             ${
-              claim.description
-                ? `<div class="claim-description">${this.escapeHtml(
-                    claim.description
-                  )}</div>`
+              sharesPerHour > 0
+                ? `
+            <div class="metric-item">
+                <svg class="metric-icon" width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z"/></svg>
+                <span class="metric-value">${this.formatNumber(
+                  sharesPerHour
+                )}</span>
+                <span>/hr</span>
+            </div>`
                 : ""
             }
             
-            <div class="claim-metrics">
-                ${
-                  sharesPerHour > 0
-                    ? `
-                <div class="metric-item">
-                    <svg class="metric-icon" width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z"/></svg>
-                    <span class="metric-value">${this.formatNumber(
-                      sharesPerHour
-                    )}</span>
-                    <span>/hr</span>
-                </div>`
-                    : ""
-                }
-                
-                <div class="metric-item">
-                    ${platformIcon}
-                    <span class="metric-value">${source}</span>
-                </div>
-                
-                <div class="metric-item">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
-                    <span>${timeAgo}</span>
-                </div>
+            <div class="metric-item">
+                ${platformIcon}
+                <span class="metric-value">${source}</span>
             </div>
             
-            <div class="claim-actions">
-                <a href="${url}" target="_blank" class="action-btn action-source">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    View Source
-                </a>
-                <button class="action-btn action-investigate" data-url="${url}">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    Investigate
-                </button>
+            <div class="metric-item">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
+                <span>${timeAgo}</span>
             </div>
         </div>
-    `;
-    },
-
-    /**
-     * Render platform breakdown
-     */
-    renderPlatformBreakdown: function (platforms) {
-      if (typeof platforms === "string") {
-        platforms = JSON.parse(platforms);
-      }
-
-      if (!platforms || Object.keys(platforms).length === 0) {
-        return "";
-      }
-
-      let html = '<div class="platform-breakdown">';
-
-      for (const [platform, percentage] of Object.entries(platforms)) {
-        html += `<span class="platform-tag">${platform}: ${percentage}%</span>`;
-      }
-
-      html += "</div>";
-      return html;
+        
+        <div class="claim-actions">
+            <a href="${url}" target="_blank" class="action-btn action-source">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                View Source
+            </a>
+            <button class="action-btn action-investigate" data-url="${url}">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                Investigate
+            </button>
+        </div>
+    </div>
+`;
     },
 
     /**
@@ -474,12 +488,12 @@
      */
     showError: function (message) {
       $("#claimsGrid").html(`
-                <div class="empty-state">
-                    <div class="empty-icon">⚠️</div>
-                    <h3 class="empty-title">Error</h3>
-                    <p class="empty-message">${message}</p>
-                </div>
-            `);
+            <div class="empty-state">
+                <div class="empty-icon">⚠️</div>
+                <h3 class="empty-title">Error</h3>
+                <p class="empty-message">${message}</p>
+            </div>
+        `);
     },
 
     /**
@@ -492,22 +506,6 @@
         console.log("AI Verify: Auto-refreshing data");
         self.loadStats();
       }, 60000); // Every 60 seconds
-    },
-
-    /**
-     * Open investigation modal (placeholder)
-     */
-    openInvestigationModal: function (claimId) {
-      console.log("Opening investigation for claim:", claimId);
-      alert("Investigation modal coming soon!");
-    },
-
-    /**
-     * Show claim analytics (placeholder)
-     */
-    showClaimAnalytics: function (claimId) {
-      console.log("Showing analytics for claim:", claimId);
-      alert("Analytics view coming soon!");
     },
 
     /**

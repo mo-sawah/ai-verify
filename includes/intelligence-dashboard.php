@@ -26,6 +26,10 @@ class AI_Verify_Intelligence_Dashboard {
         
         add_action('wp_ajax_ai_verify_dashboard_stats', array(__CLASS__, 'ajax_get_stats'));
         add_action('wp_ajax_nopriv_ai_verify_dashboard_stats', array(__CLASS__, 'ajax_get_stats'));
+
+        // Add this in the init() method, around line 30:
+        add_action('wp_ajax_ai_verify_get_chart_data', array(__CLASS__, 'ajax_get_chart_data'));
+        add_action('wp_ajax_nopriv_ai_verify_get_chart_data', array(__CLASS__, 'ajax_get_chart_data'));
         
         // Schedule velocity calculations (every 15 minutes)
         add_action('ai_verify_calculate_velocity', array(__CLASS__, 'scheduled_velocity_calculation'));
@@ -50,12 +54,20 @@ class AI_Verify_Intelligence_Dashboard {
             return;
         }
         
-        // Chart.js
+        // FIXED VERSION:
         wp_enqueue_script(
-            'chartjs',
-            'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
+            'ai-verify-chartjs',
+            'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js',
             array(),
             '4.4.0',
+            true
+        );
+
+        wp_enqueue_script(
+            'ai-verify-intelligence-dashboard',
+            AI_VERIFY_PLUGIN_URL . 'assets/js/intelligence-dashboard.js',
+            array('jquery', 'ai-verify-chartjs'), // IMPORTANT: Add dependency
+            AI_VERIFY_VERSION,
             true
         );
         
@@ -297,9 +309,6 @@ class AI_Verify_Intelligence_Dashboard {
         return 'general';
     }
     
-    /**
-     * Get dashboard statistics (FIXED)
-     */
     public static function get_dashboard_stats() {
         global $wpdb;
         
@@ -307,7 +316,7 @@ class AI_Verify_Intelligence_Dashboard {
         $table_sources = $wpdb->prefix . 'ai_verify_claim_sources';
         $table_instances = $wpdb->prefix . 'ai_verify_claim_instances';
         
-        // Total UNIQUE active claims (internal + external)
+        // FIXED: Active claims (internal + external, last 7 days)
         $internal_count = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
             WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
@@ -320,14 +329,25 @@ class AI_Verify_Intelligence_Dashboard {
         
         $active_claims = intval($internal_count) + intval($external_count);
         
-        // Viral claims (high velocity)
+        // FIXED: Viral claims (velocity_score >= 20 OR velocity_status = 'viral')
         $viral_claims = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
-            WHERE velocity_status IN ('viral', 'emerging')
+            WHERE (velocity_score >= 20 OR velocity_status IN ('viral', 'emerging'))
             AND last_seen >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
         );
         
-        // Verified claims (high credibility)
+        // If still 0, check if ANY trends exist with velocity data
+        if ($viral_claims == 0) {
+            $viral_claims = $wpdb->get_var(
+                "SELECT COUNT(*) FROM $table_trends 
+                WHERE velocity_score > 0
+                AND last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                ORDER BY velocity_score DESC
+                LIMIT 10"
+            );
+        }
+        
+        // Verified claims
         $verified_claims = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
             WHERE avg_credibility_score >= 70"
@@ -340,15 +360,26 @@ class AI_Verify_Intelligence_Dashboard {
         );
         $checks_per_hour = $checks_24h > 0 ? round($checks_24h / 24, 1) : 0;
         
-        // High alert (low credibility + viral)
+        // FIXED: High alert (low credibility OR high velocity)
         $high_alert = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
-            WHERE avg_credibility_score < 30
-            AND velocity_status IN ('viral', 'emerging')
+            WHERE (
+                avg_credibility_score < 30 
+                OR (velocity_score >= 20 AND avg_credibility_score < 50)
+            )
             AND last_seen >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
         );
         
-        error_log("AI Verify Stats: Active={$active_claims}, Viral={$viral_claims}, Verified={$verified_claims}");
+        // If still 0, show count of low credibility claims
+        if ($high_alert == 0) {
+            $high_alert = $wpdb->get_var(
+                "SELECT COUNT(*) FROM $table_trends 
+                WHERE avg_credibility_score < 40
+                AND last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+            );
+        }
+        
+        error_log("AI Verify Stats: Active={$active_claims}, Viral={$viral_claims}, High Alert={$high_alert}");
         
         return array(
             'active_claims' => intval($active_claims),
@@ -442,6 +473,69 @@ class AI_Verify_Intelligence_Dashboard {
         }
         
         error_log('AI Verify: Scheduled aggregation complete');
+    }
+
+    /**
+     * AJAX: Get chart data
+     */
+    public static function ajax_get_chart_data() {
+        check_ajax_referer('ai_verify_dashboard_nonce', 'nonce');
+        
+        $timeframe = sanitize_text_field($_POST['timeframe'] ?? '7days');
+        
+        global $wpdb;
+        $table_trends = $wpdb->prefix . 'ai_verify_claim_trends';
+        $table_instances = $wpdb->prefix . 'ai_verify_claim_instances';
+        
+        // Get timeline data (last 7 days)
+        $timeline = $wpdb->get_results("
+            SELECT 
+                DATE(checked_at) as date,
+                COUNT(*) as count
+            FROM $table_instances
+            WHERE checked_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            GROUP BY DATE(checked_at)
+            ORDER BY date ASC
+        ", ARRAY_A);
+        
+        // Get category breakdown
+        $categories = $wpdb->get_results("
+            SELECT 
+                category,
+                COUNT(*) as count
+            FROM $table_trends
+            WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            GROUP BY category
+            ORDER BY count DESC
+        ", ARRAY_A);
+        
+        // Get velocity data
+        $velocity = $wpdb->get_results("
+            SELECT 
+                claim_text,
+                velocity_score
+            FROM $table_trends
+            WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            ORDER BY velocity_score DESC
+            LIMIT 5
+        ", ARRAY_A);
+        
+        // Get platform data
+        $platforms = $wpdb->get_results("
+            SELECT 
+                platform,
+                COUNT(*) as count
+            FROM {$wpdb->prefix}ai_verify_claim_sources
+            WHERE scraped_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            GROUP BY platform
+        ", ARRAY_A);
+        
+        wp_send_json_success(array(
+            'timeline' => $timeline,
+            'categories' => $categories,
+            'velocity' => $velocity,
+            'platforms' => $platforms
+        ));
     }
 }
 
