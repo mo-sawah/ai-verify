@@ -51,52 +51,35 @@ class AI_Verify_Intelligence_Dashboard {
     /**
      * Enqueue dashboard assets
      */
-    public static function enqueue_assets() {
-        global $post;
-        
-        if (!is_a($post, 'WP_Post') || !has_shortcode($post->post_content, 'ai_verify_intelligence_dashboard')) {
+    public static function enqueue_assets($hook) {
+        // Only load on our dashboard page (ADMIN PAGE, not shortcode)
+        if (strpos($hook, 'ai-verify-intelligence') === false) {
             return;
         }
         
-        // FIXED VERSION:
+        // STEP 1: Load Chart.js library from CDN
         wp_enqueue_script(
-            'ai-verify-chartjs',
+            'chartjs-library',
             'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js',
             array(),
             '4.4.0',
             true
         );
-
+        
+        // STEP 2: Load OUR Chart.js wrapper (depends on Chart.js library)
         wp_enqueue_script(
-            'ai-verify-intelligence-dashboard',
-            AI_VERIFY_PLUGIN_URL . 'assets/js/intelligence-dashboard.js',
-            array('jquery', 'ai-verify-chartjs'), // IMPORTANT: Add dependency
+            'ai-verify-charts',
+            AI_VERIFY_PLUGIN_URL . 'assets/js/Chart.js',
+            array('jquery', 'chartjs-library'),
             AI_VERIFY_VERSION,
             true
         );
         
-        // Dashboard CSS
-        wp_enqueue_style(
-            'ai-verify-intelligence-dashboard',
-            AI_VERIFY_PLUGIN_URL . 'assets/css/intelligence-dashboard.css',
-            array(),
-            AI_VERIFY_VERSION
-        );
-        
-        // Dashboard JS
+        // STEP 3: Load Dashboard JS (depends on our Chart wrapper)
         wp_enqueue_script(
             'ai-verify-intelligence-dashboard',
             AI_VERIFY_PLUGIN_URL . 'assets/js/intelligence-dashboard.js',
-            array('jquery', 'chartjs'),
-            AI_VERIFY_VERSION,
-            true
-        );
-        
-        // Dashboard Charts
-        wp_enqueue_script(
-            'ai-verify-dashboard-charts',
-            AI_VERIFY_PLUGIN_URL . 'assets/js/dashboard-charts.js',
-            array('jquery', 'chartjs'),
+            array('jquery', 'ai-verify-charts'),
             AI_VERIFY_VERSION,
             true
         );
@@ -105,9 +88,16 @@ class AI_Verify_Intelligence_Dashboard {
         wp_localize_script('ai-verify-intelligence-dashboard', 'aiVerifyDashboard', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('ai_verify_dashboard_nonce'),
-            'refresh_interval' => 60000, // 1 minute
-            'theme_class' => self::detect_theme_class()
+            'plugin_url' => AI_VERIFY_PLUGIN_URL
         ));
+        
+        // Dashboard CSS
+        wp_enqueue_style(
+            'ai-verify-intelligence-dashboard',
+            AI_VERIFY_PLUGIN_URL . 'assets/css/intelligence-dashboard.css',
+            array(),
+            AI_VERIFY_VERSION
+        );
     }
     
     /**
