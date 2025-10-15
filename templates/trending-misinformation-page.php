@@ -192,26 +192,3 @@ if ($source_filter !== 'all') {
     </div>
     
 </div>
-
-<?php
-
-// Helper functions
-function sanitize_rating($rating) {
-    $rating_lower = strtolower($rating);
-    if (strpos($rating_lower, 'false') !== false) return 'false';
-    if (strpos($rating_lower, 'true') !== false && strpos($rating_lower, 'mostly') === false) return 'true';
-    if (strpos($rating_lower, 'mostly true') !== false) return 'mostly-true';
-    if (strpos($rating_lower, 'mostly false') !== false) return 'mostly-false';
-    if (strpos($rating_lower, 'misleading') !== false || strpos($rating_lower, 'mixture') !== false) return 'misleading';
-    return 'unknown';
-}
-
-function get_rating_icon($rating) {
-    $rating_lower = strtolower($rating);
-    if (strpos($rating_lower, 'false') !== false && strpos($rating_lower, 'mostly') === false) return '❌';
-    if (strpos($rating_lower, 'true') !== false && strpos($rating_lower, 'mostly') === false) return '✅';
-    if (strpos($rating_lower, 'mostly true') !== false) return '✓';
-    if (strpos($rating_lower, 'mostly false') !== false) return '✗';
-    if (strpos($rating_lower, 'misleading') !== false || strpos($rating_lower, 'mixture') !== false) return '⚠️';
-    return '❓';
-}

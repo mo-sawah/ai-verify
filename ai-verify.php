@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.37
+ * Version: 2.0.38
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.37');
+define('AI_VERIFY_VERSION', '2.0.38');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -91,6 +91,11 @@ class AI_Verify {
         // Load leads admin (only in admin)
         if (is_admin() && file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-leads-admin.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-leads-admin.php';
+        }
+
+        // Load trending helpers (must load before template)
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trending-helpers.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/trending-helpers.php';
         }
 
         // Load external fact-check aggregator
