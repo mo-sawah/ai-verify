@@ -10,7 +10,6 @@
 /* Light Mode (Default) */
 .s-light .ai-verify-intelligence-dashboard,
 .ai-verify-intelligence-dashboard {
-  --bg-primary: #f8fafc;
   --bg-secondary: #ffffff;
   --bg-tertiary: #f1f5f9;
   --bg-hover: #e2e8f0;
@@ -35,7 +34,6 @@
 
 /* Dark Mode */
 .s-dark .ai-verify-intelligence-dashboard {
-  --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --bg-tertiary: #334155;
   --bg-hover: #475569;
@@ -858,7 +856,7 @@ html {
 .action-btn {
   flex: 1;
   padding: 0px 16px;
-  background: var(--bg-tertiary);
+  background: #d1d9e1;
   border: 2px solid transparent;
   border-radius: 8px;
   color: var(--text-secondary);

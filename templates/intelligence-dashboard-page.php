@@ -276,7 +276,7 @@ transform: translateY(-50%);
 pointer-events: none;
 color: var(--text-tertiary);
 }.filter-button {
-padding: 10px 20px;
+padding: 0px 20px;
 background: var(--accent-primary);
 border: none;
 border-radius: 10px;
