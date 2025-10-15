@@ -34,6 +34,8 @@ class AI_Verify_Intelligence_Dashboard {
         // *** MAKE SURE THESE ARE HERE: ***
         add_action('wp_ajax_ai_verify_dashboard_refresh', array(__CLASS__, 'ajax_refresh_dashboard'));
         add_action('wp_ajax_ai_verify_dashboard_stats', array(__CLASS__, 'ajax_get_stats'));
+        add_action('wp_ajax_nopriv_ai_verify_dashboard_refresh', array(__CLASS__, 'ajax_refresh_dashboard'));
+
         
         // Schedule velocity calculations (every 15 minutes)
         add_action('ai_verify_calculate_velocity', array(__CLASS__, 'scheduled_velocity_calculation'));
@@ -51,9 +53,11 @@ class AI_Verify_Intelligence_Dashboard {
     /**
      * Enqueue dashboard assets
      */
-    public static function enqueue_assets($hook) {
-        // Only load on our dashboard page (ADMIN PAGE, not shortcode)
-        if (strpos($hook, 'ai-verify-intelligence') === false) {
+    public static function enqueue_assets() {
+        global $post;
+        
+        // Check if this page has our shortcode
+        if (!is_a($post, 'WP_Post') || !has_shortcode($post->post_content, 'ai_verify_intelligence_dashboard')) {
             return;
         }
         
@@ -88,7 +92,9 @@ class AI_Verify_Intelligence_Dashboard {
         wp_localize_script('ai-verify-intelligence-dashboard', 'aiVerifyDashboard', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('ai_verify_dashboard_nonce'),
-            'plugin_url' => AI_VERIFY_PLUGIN_URL
+            'plugin_url' => AI_VERIFY_PLUGIN_URL,
+            'refresh_interval' => 60000,
+            'theme_class' => self::detect_theme_class()
         ));
         
         // Dashboard CSS
