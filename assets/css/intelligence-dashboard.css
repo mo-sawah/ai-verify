@@ -1224,3 +1224,33 @@ input,
 .load-more-btn:hover svg {
   transform: translateY(2px);
 }
+
+/* Two stats per row on mobile only */
+@media (max-width: 767px) {
+  .dashboard-stats-bar {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px;
+  }
+
+  .stat-item {
+    flex-direction: column;
+    text-align: center;
+    padding: 16px 12px;
+  }
+
+  .stat-icon {
+    margin: 0 auto 10px;
+  }
+
+  .stat-content {
+    align-items: center;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+}
