@@ -154,8 +154,8 @@ if ($source_filter !== 'all') {
                             <p class="card-description"><?php echo esc_html($description); ?></p>
                         <?php endif; ?>
                         
-                        <div class="card-rating rating-<?php echo esc_attr(self::sanitize_rating($rating)); ?>">
-                            <span class="rating-icon"><?php echo self::get_rating_icon($rating); ?></span>
+                        <div class="card-rating rating-<?php echo esc_attr(ai_verify_sanitize_rating($rating)); ?>">
+                            <span class="rating-icon"><?php echo ai_verify_get_rating_icon($rating); ?></span>
                             <span class="rating-text"><?php echo esc_html($rating); ?></span>
                         </div>
                     </div>
