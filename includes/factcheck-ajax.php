@@ -250,7 +250,7 @@ class AI_Verify_Factcheck_Ajax {
     }
 
     /**
-     * Background processor (runs via WP Cron) - UPDATED FOR SINGLE CALL MODES
+     * Background processor (runs via WP Cron) - FIXED WITH TRENDS INTEGRATION
      */
     public static function background_process_report($report_id) {
         error_log("AI Verify: Background processing started for report: $report_id");
@@ -284,46 +284,35 @@ class AI_Verify_Factcheck_Ajax {
 
             // Step 2: ROUTING LOGIC - Choose analysis method
             if ($provider === 'single_call_perplexity' || $provider === 'single_call_openrouter') {
-
-                // === NEW "HYBRID" SINGLE CALL WORKFLOW ===
+                // Single call workflow
                 error_log("AI Verify: Using Hybrid Single Call workflow with provider: $provider");
 
-                // Step A: Check Google Fact-Check API first (This now works because the method is public)
                 $google_key = get_option('ai_verify_google_factcheck_key');
                 $google_factcheck_context = '';
                 if (!empty($google_key)) {
                     $google_result = AI_Verify_Factcheck_Analyzer::check_google_factcheck($context, $google_key);
                     if ($google_result && !empty($google_result['explanation'])) {
-                        $google_factcheck_context = "\n\n=== EXISTING FACT-CHECK (Source: Google Fact Check API) ===\nClaim: {$google_result['explanation']}\nRating: {$google_result['rating']}\nSource: {$google_result['source']['name']} ({$google_result['source']['url']})\n---";
-                        error_log("AI Verify: Found existing fact-check via Google API.");
+                        $google_factcheck_context = "\n\n=== EXISTING FACT-CHECK ===\n{$google_result['explanation']}\n";
                     }
                 }
 
-                // Step B: Get real-time web search results from Tavily (with Firecrawl fallback)
-                // NOTE: We are making these public in the main analyzer as they are generic utilities.
                 $web_results = AI_Verify_Factcheck_Analyzer::search_web_tavily($context);
                 if (empty($web_results)) {
-                    error_log('AI Verify: Tavily failed. Falling back to Firecrawl Search.');
                     $web_results = AI_Verify_Factcheck_Analyzer::search_web_firecrawl($context);
                 }
 
-                $web_search_context = "\n\n=== REAL-TIME WEB SEARCH RESULTS ===\n";
+                $web_search_context = "\n\n=== WEB SEARCH RESULTS ===\n";
                 if (!empty($web_results)) {
                     foreach ($web_results as $idx => $result) {
-                        $web_search_context .= "[Source " . ($idx + 1) . "] Title: {$result['title']}\nURL: {$result['url']}\nContent: " . substr($result['content'], 0, 400) . "...\n---\n";
+                        $web_search_context .= "[Source " . ($idx + 1) . "] {$result['title']}\n{$result['url']}\n";
                     }
-                } else {
-                    $web_search_context .= "No real-time web search results were found.\n";
-                    error_log("AI Verify: Warning - No web search results found for single-call analysis.");
                 }
 
-                // Step C: Call the appropriate AI from the NEW HYBRID ANALYZER CLASS
-                $result_data = null;
                 $combined_context = $google_factcheck_context . $web_search_context;
 
                 if ($provider === 'single_call_perplexity') {
                     $result_data = AI_Verify_Factcheck_Hybrid_Analyzer::analyze_with_single_call_perplexity($content, $context, $combined_context);
-                } else { // single_call_openrouter
+                } else {
                     $result_data = AI_Verify_Factcheck_Hybrid_Analyzer::analyze_with_single_call_openrouter($content, $context, $combined_context);
                 }
 
@@ -331,15 +320,12 @@ class AI_Verify_Factcheck_Ajax {
                     throw new Exception($result_data->get_error_message());
                 }
 
-                // **NEW SANITY CHECK: Ensure the AI returned a valid report structure**
-                if (empty($result_data) || !is_array($result_data) || !isset($result_data['factcheck_results']) || !is_array($result_data['factcheck_results'])) {
-                    error_log("AI Verify: Validation failed. AI result was not a valid report structure. Data received: " . print_r($result_data, true));
-                    throw new Exception('AI failed to generate a valid report. The response was empty or malformed.');
+                if (empty($result_data) || !isset($result_data['factcheck_results'])) {
+                    throw new Exception('AI failed to generate a valid report.');
                 }
 
-                // Step D: Extract and save the data (now we know it's valid)
-                $factcheck_results = $result_data['factcheck_results']; // No need for null coalesce anymore
-                $overall_score = $result_data['overall_score'] ?? 50; // Keep default for score/rating
+                $factcheck_results = $result_data['factcheck_results'];
+                $overall_score = $result_data['overall_score'] ?? 50;
                 $credibility_rating = $result_data['credibility_rating'] ?? 'Mixed Credibility';
                 $propaganda = $result_data['propaganda_techniques'] ?? array();
                 
@@ -361,8 +347,7 @@ class AI_Verify_Factcheck_Ajax {
                 );
 
             } else {
-                
-                // === ORIGINAL MULTI-STEP WORKFLOW ===
+                // Multi-step workflow
                 error_log("AI Verify: Using Multi-Step workflow with provider: $provider");
                 
                 $propaganda = AI_Verify_Factcheck_Analyzer::detect_propaganda($content);
@@ -394,10 +379,38 @@ class AI_Verify_Factcheck_Ajax {
             }
             
             error_log("AI Verify: ✅ Completed successfully: $report_id");
-
-            // NEW: Trigger trends tracking
+            
+            // *** CRITICAL FIX: Trigger trends tracking ***
             $report = AI_Verify_Factcheck_Database::get_report($report_id);
-            if ($report) {
+            if ($report && class_exists('AI_Verify_Trends_Database')) {
+                error_log("AI Verify Trends: Processing completed report for trends");
+                
+                // Record each claim in trends
+                if (!empty($report['factcheck_results']) && is_array($report['factcheck_results'])) {
+                    foreach ($report['factcheck_results'] as $claim_result) {
+                        if (empty($claim_result['claim'])) continue;
+                        
+                        $claim_score = isset($claim_result['confidence']) 
+                            ? ($claim_result['confidence'] * 100) 
+                            : floatval($report['overall_score']);
+                        
+                        $metadata = array(
+                            'source_url' => $report['input_value'],
+                            'input_type' => $report['input_type']
+                        );
+                        
+                        $trend_id = AI_Verify_Trends_Database::record_claim(
+                            $claim_result['claim'],
+                            $report_id,
+                            $claim_score,
+                            $metadata
+                        );
+                        
+                        error_log("AI Verify Trends: Recorded claim with trend_id: $trend_id");
+                    }
+                }
+                
+                // Also trigger the action hook for other integrations
                 do_action('ai_verify_report_completed', $report_id, $report);
             }
 
