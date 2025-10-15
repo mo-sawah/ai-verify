@@ -8,6 +8,11 @@
 
   const Dashboard = {
     // State
+    currentPage: 1,
+    itemsPerPage: 20,
+    totalClaims: 0,
+
+    // State
     filters: {
       category: "all",
       platform: "all",
@@ -147,14 +152,19 @@
     },
 
     /**
-     * Load dashboard data
+     * Load dashboard data (UPDATED with pagination)
      */
-    loadData: function () {
+    loadData: function (loadMore = false) {
       const self = this;
 
-      $("#claimsGrid").html(
-        '<div class="loading-spinner"><div class="spinner"></div><p class="loading-text">Loading claims...</p></div>'
-      );
+      if (!loadMore) {
+        self.currentPage = 1;
+        $("#claimsGrid").html(
+          '<div class="loading-spinner"><div class="spinner"></div><p class="loading-text">Loading claims...</p></div>'
+        );
+      } else {
+        self.currentPage++;
+      }
 
       $.ajax({
         url: aiVerifyDashboard.ajax_url,
@@ -167,11 +177,29 @@
           velocity: self.filters.velocity,
           timeframe: self.filters.timeframe,
           search: self.filters.search,
+          page: self.currentPage,
+          per_page: self.itemsPerPage,
         },
         success: function (response) {
           if (response.success) {
-            self.renderClaims(response.data.claims);
+            self.totalClaims = response.data.total;
+
+            if (loadMore) {
+              // Append to existing claims
+              response.data.claims.forEach((claim, index) => {
+                const html = self.renderClaimCard(
+                  claim,
+                  (self.currentPage - 1) * self.itemsPerPage + index
+                );
+                $("#claimsGrid .load-more-wrapper").before(html);
+              });
+            } else {
+              // Replace all claims
+              self.renderClaims(response.data.claims);
+            }
+
             self.updateCount(response.data.total);
+            self.updateLoadMoreButton();
           } else {
             self.showError("Failed to load data");
           }
@@ -180,6 +208,42 @@
           self.showError("Connection error");
         },
       });
+    },
+
+    /**
+     * Update or add Load More button
+     */
+    updateLoadMoreButton: function () {
+      const self = this;
+      const loaded = self.currentPage * self.itemsPerPage;
+      const remaining = self.totalClaims - loaded;
+
+      // Remove existing button
+      $(".load-more-wrapper").remove();
+
+      if (remaining > 0) {
+        const buttonHtml = `
+            <div class="load-more-wrapper" style="text-align: center; padding: 30px;">
+                <button id="loadMoreBtn" class="load-more-btn">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                    </svg>
+                    Load More (${remaining} remaining)
+                </button>
+            </div>
+        `;
+        $("#claimsGrid").append(buttonHtml);
+
+        // Add click handler
+        $("#loadMoreBtn").on("click", function () {
+          $(this)
+            .prop("disabled", true)
+            .html(
+              '<span class="spinner" style="width: 20px; height: 20px;"></span> Loading...'
+            );
+          self.loadData(true);
+        });
+      }
     },
 
     /**
@@ -206,19 +270,23 @@
     },
 
     /**
-     * Render claims grid
+     * Render claims grid (UPDATED to initialize charts)
      */
     renderClaims: function (claims) {
       const $grid = $("#claimsGrid");
 
       if (!claims || claims.length === 0) {
         $grid.html(`
-                    <div class="empty-state">
-                        <div class="empty-icon">🔍</div>
-                        <h3 class="empty-title">No Claims Found</h3>
-                        <p class="empty-message">Try adjusting your filters or search terms</p>
-                    </div>
-                `);
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
+                    </svg>
+                </div>
+                <h3 class="empty-title">No Claims Found</h3>
+                <p class="empty-message">Try adjusting your filters or search terms</p>
+            </div>
+        `);
         return;
       }
 
@@ -229,6 +297,11 @@
       });
 
       $grid.html(html);
+
+      // Initialize charts with this data
+      if (typeof DashboardCharts !== "undefined") {
+        DashboardCharts.initWithData(claims);
+      }
     },
 
     /**

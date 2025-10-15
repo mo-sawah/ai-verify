@@ -360,7 +360,7 @@ class AI_Verify_Intelligence_Dashboard {
     }
     
     /**
-     * AJAX: Refresh dashboard data
+     * AJAX: Refresh dashboard data (WITH PAGINATION)
      */
     public static function ajax_refresh_data() {
         check_ajax_referer('ai_verify_dashboard_nonce', 'nonce');
@@ -373,11 +373,25 @@ class AI_Verify_Intelligence_Dashboard {
             'search' => sanitize_text_field($_POST['search'] ?? '')
         );
         
-        $claims = self::get_dashboard_data($filters);
+        $page = intval($_POST['page'] ?? 1);
+        $per_page = intval($_POST['per_page'] ?? 20);
+        
+        // Get ALL claims first
+        $all_claims = self::get_dashboard_data($filters);
+        $total = count($all_claims);
+        
+        // Paginate
+        $offset = ($page - 1) * $per_page;
+        $claims = array_slice($all_claims, $offset, $per_page);
+        
+        error_log("AI Verify: Returning page {$page}, {$per_page} items (total: {$total})");
         
         wp_send_json_success(array(
-            'claims' => array_slice($claims, 0, 20),
-            'total' => count($claims)
+            'claims' => $claims,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $per_page,
+            'has_more' => ($offset + $per_page) < $total
         ));
     }
     
