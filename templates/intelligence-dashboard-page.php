@@ -340,4 +340,35 @@ font-size: 24px;
     text-align: center;
 }
 }
+
+/* Two stats per row on mobile only - FORCE OVERRIDE */
+@media (max-width: 767px) {
+    .dashboard-stats-bar {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+    }
+    
+    .stat-item {
+        flex-direction: column !important;
+        text-align: center !important;
+        padding: 16px 12px !important;
+    }
+    
+    .stat-icon {
+        margin: 0 auto 10px !important;
+    }
+    
+    .stat-content {
+        align-items: center !important;
+    }
+    
+    .stat-value {
+        font-size: 24px !important;
+    }
+    
+    .stat-label {
+        font-size: 11px !important;
+    }
+}
 </style>
