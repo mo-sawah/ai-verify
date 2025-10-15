@@ -298,47 +298,57 @@ class AI_Verify_Intelligence_Dashboard {
     }
     
     /**
-     * Get dashboard statistics
+     * Get dashboard statistics (FIXED)
      */
     public static function get_dashboard_stats() {
         global $wpdb;
         
         $table_trends = $wpdb->prefix . 'ai_verify_claim_trends';
+        $table_sources = $wpdb->prefix . 'ai_verify_claim_sources';
         $table_instances = $wpdb->prefix . 'ai_verify_claim_instances';
         
-        // Total active claims
-        $active_claims = $wpdb->get_var(
+        // Total UNIQUE active claims (internal + external)
+        $internal_count = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
-             WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+            WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
         );
         
-        // Viral claims
+        $external_count = $wpdb->get_var(
+            "SELECT COUNT(DISTINCT source_url) FROM $table_sources 
+            WHERE scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+        );
+        
+        $active_claims = intval($internal_count) + intval($external_count);
+        
+        // Viral claims (high velocity)
         $viral_claims = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
-             WHERE velocity_status IN ('viral', 'emerging')
-             AND last_seen >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+            WHERE velocity_status IN ('viral', 'emerging')
+            AND last_seen >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
         );
         
-        // Total verified
+        // Verified claims (high credibility)
         $verified_claims = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
-             WHERE avg_credibility_score >= 70"
+            WHERE avg_credibility_score >= 70"
         );
         
         // Checks per hour (last 24h)
         $checks_24h = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_instances 
-             WHERE checked_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+            WHERE checked_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
         );
-        $checks_per_hour = round($checks_24h / 24, 1);
+        $checks_per_hour = $checks_24h > 0 ? round($checks_24h / 24, 1) : 0;
         
-        // High alert (very low credibility + viral)
+        // High alert (low credibility + viral)
         $high_alert = $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_trends 
-             WHERE avg_credibility_score < 30
-             AND velocity_status IN ('viral', 'emerging')
-             AND last_seen >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+            WHERE avg_credibility_score < 30
+            AND velocity_status IN ('viral', 'emerging')
+            AND last_seen >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
         );
+        
+        error_log("AI Verify Stats: Active={$active_claims}, Viral={$viral_claims}, Verified={$verified_claims}");
         
         return array(
             'active_claims' => intval($active_claims),
