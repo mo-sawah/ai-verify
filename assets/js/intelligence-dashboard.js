@@ -2,13 +2,16 @@
  * Intelligence Dashboard JavaScript
  * Handles interactivity, real-time updates, and theme detection
  */
+
 (function ($) {
   "use strict";
+
   const Dashboard = {
     // State
     currentPage: 1,
     itemsPerPage: 20,
     totalClaims: 0,
+
     // State
     filters: {
       category: "all",
@@ -38,13 +41,13 @@
       // Load stats
       this.loadStats();
 
-      // *** NEW: Load chart data ***
+      // Load chart data (with retry logic for DashboardCharts)
       this.loadChartData();
 
       // Start auto-refresh (every 60 seconds)
       this.startAutoRefresh();
 
-      // Initialize charts after short delay
+      // Initialize DashboardCharts base (without data)
       setTimeout(() => {
         if (typeof DashboardCharts !== "undefined") {
           DashboardCharts.init();
@@ -74,6 +77,9 @@
       console.log("AI Verify: No theme detected, defaulting to light");
     },
 
+    /**
+     * Load chart data via AJAX (with retry logic)
+     */
     loadChartData: function () {
       const self = this;
 
@@ -90,37 +96,13 @@
         success: function (response) {
           console.log("Chart data response:", response);
 
-          // *** FIXED: Check response structure correctly ***
           if (response && response.success && response.data) {
             console.log("Chart data received:", response.data);
 
-            // Trigger custom event with data
-            $(document).trigger("charts:dataLoaded", [response.data]);
-
-            // Also directly call the chart initialization
-            if (typeof DashboardCharts !== "undefined") {
-              DashboardCharts.initWithRealData(response.data);
-            } else {
-              console.error("DashboardCharts is not defined!");
-            }
+            // Wait for DashboardCharts to be available, then initialize
+            self.initChartsWhenReady(response.data);
           } else {
             console.error("Invalid chart data response:", response);
-
-            // *** DEBUGGING: Show what's actually in the response ***
-            console.log("Response keys:", Object.keys(response || {}));
-            console.log("Has success?", "success" in (response || {}));
-            console.log("Has data?", "data" in (response || {}));
-
-            // *** Try with empty data to at least show chart structure ***
-            if (typeof DashboardCharts !== "undefined") {
-              console.warn("Initializing charts with empty data...");
-              DashboardCharts.initWithRealData({
-                timeline: [],
-                categories: [],
-                velocity: [],
-                platforms: [],
-              });
-            }
           }
         },
         error: function (xhr, status, error) {
@@ -132,7 +114,61 @@
     },
 
     /**
-     * Setup event listeners (FIXED)
+     * Wait for DashboardCharts to load, then initialize with data
+     */
+    initChartsWhenReady: function (data, attempts) {
+      attempts = attempts || 0;
+      const self = this;
+      const maxAttempts = 20; // Wait up to 2 seconds
+
+      if (typeof DashboardCharts !== "undefined") {
+        console.log(
+          "AI Verify: DashboardCharts found, initializing with data..."
+        );
+
+        // Trigger custom event with data
+        $(document).trigger("charts:dataLoaded", [data]);
+
+        // Initialize charts with real data
+        DashboardCharts.initWithRealData(data);
+      } else {
+        if (attempts < maxAttempts) {
+          console.log(
+            "AI Verify: Waiting for DashboardCharts... (attempt " +
+              (attempts + 1) +
+              "/" +
+              maxAttempts +
+              ")"
+          );
+
+          // Try again after 100ms
+          setTimeout(function () {
+            self.initChartsWhenReady(data, attempts + 1);
+          }, 100);
+        } else {
+          console.error(
+            "AI Verify: DashboardCharts failed to load after " +
+              maxAttempts +
+              " attempts"
+          );
+          console.error(
+            "Check if Chart.js file exists at: " +
+              (aiVerifyDashboard.plugin_url || "") +
+              "assets/js/Chart.js"
+          );
+
+          // Show error message to user
+          $("#analyticsContent").prepend(
+            '<div style="background: #fee; color: #c53030; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">' +
+              "<strong>⚠️ Charts failed to load.</strong> Please refresh the page or contact support." +
+              "</div>"
+          );
+        }
+      }
+    },
+
+    /**
+     * Setup event listeners
      */
     setupEventListeners: function () {
       const self = this;
@@ -146,7 +182,7 @@
         }, 500);
       });
 
-      // Filter dropdowns (FIXED)
+      // Filter dropdowns
       $(".filter-select").on("change", function () {
         const filterType = $(this).data("filter");
         const filterValue = $(this).val();
@@ -157,13 +193,13 @@
 
         self.loadData();
 
-        // *** NEW: Reload charts when timeframe changes ***
+        // Reload charts when timeframe changes
         if (filterType === "timeframe") {
           self.loadChartData();
         }
       });
 
-      // Filter chips (FIXED)
+      // Filter chips
       $(".filter-chip").on("click", function () {
         $(".filter-chip").removeClass("active");
         $(this).addClass("active");
@@ -181,7 +217,7 @@
         self.loadData();
       });
 
-      // Analytics toggle (FIXED)
+      // Analytics toggle
       $("#analyticsToggle").on("click", function () {
         $("#analyticsContent").slideToggle(300);
         $(this).toggleClass("collapsed");
@@ -196,7 +232,7 @@
         $(this).addClass("spinning");
         self.loadData();
         self.loadStats();
-        self.loadChartData(); // *** NEW: Also refresh charts ***
+        self.loadChartData(); // Also refresh charts
 
         setTimeout(function () {
           $("#refreshButton").removeClass("spinning");
@@ -215,9 +251,10 @@
     },
 
     /**
-     * Load dashboard data (UPDATED with pagination)
+     * Load dashboard data (with pagination)
      */
-    loadData: function (loadMore = false) {
+    loadData: function (loadMore) {
+      loadMore = loadMore || false;
       const self = this;
 
       if (!loadMore) {
@@ -249,7 +286,7 @@
 
             if (loadMore) {
               // Append to existing claims
-              response.data.claims.forEach((claim, index) => {
+              response.data.claims.forEach(function (claim, index) {
                 const html = self.renderClaimCard(
                   claim,
                   (self.currentPage - 1) * self.itemsPerPage + index
@@ -285,16 +322,18 @@
       $(".load-more-wrapper").remove();
 
       if (remaining > 0) {
-        const buttonHtml = `
-        <div class="load-more-wrapper" style="text-align: center; padding: 30px;">
-            <button id="loadMoreBtn" class="load-more-btn">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
-                </svg>
-                Load More (${remaining} remaining)
-            </button>
-        </div>
-    `;
+        const buttonHtml =
+          '<div class="load-more-wrapper" style="text-align: center; padding: 30px;">' +
+          '<button id="loadMoreBtn" class="load-more-btn">' +
+          '<svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">' +
+          '<path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>' +
+          "</svg>" +
+          " Load More (" +
+          remaining +
+          " remaining)" +
+          "</button>" +
+          "</div>";
+
         $("#claimsGrid").append(buttonHtml);
 
         // Add click handler
@@ -333,37 +372,37 @@
     },
 
     /**
-     * Render claims grid (UPDATED to initialize charts)
+     * Render claims grid
      */
     renderClaims: function (claims) {
       const $grid = $("#claimsGrid");
 
       if (!claims || claims.length === 0) {
-        $grid.html(`
-        <div class="empty-state">
-            <div class="empty-icon">
-                <svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
-                </svg>
-            </div>
-            <h3 class="empty-title">No Claims Found</h3>
-            <p class="empty-message">Try adjusting your filters or search terms</p>
-        </div>
-    `);
+        $grid.html(
+          '<div class="empty-state">' +
+            '<div class="empty-icon">' +
+            '<svg width="64" height="64" fill="currentColor" viewBox="0 0 20 20">' +
+            '<path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>' +
+            "</svg>" +
+            "</div>" +
+            '<h3 class="empty-title">No Claims Found</h3>' +
+            '<p class="empty-message">Try adjusting your filters or search terms</p>' +
+            "</div>"
+        );
         return;
       }
 
       let html = "";
 
-      claims.forEach((claim, index) => {
-        html += this.renderClaimCard(claim, index);
+      claims.forEach(function (claim, index) {
+        html += Dashboard.renderClaimCard(claim, index);
       });
 
       $grid.html(html);
     },
 
     /**
-     * Render individual claim card (FIXED)
+     * Render individual claim card
      */
     renderClaimCard: function (claim, index) {
       const claimText =
@@ -418,7 +457,7 @@
       const platformIcon = platformIcons[platform] || platformIcons["rss"];
 
       // Time ago
-      const timeAgo = this.formatTimeAgo(date);
+      const timeAgo = Dashboard.formatTimeAgo(date);
 
       // Category icon
       const categoryIcons = {
@@ -435,67 +474,78 @@
       };
       const categoryIcon = categoryIcons[category] || categoryIcons["general"];
 
-      return `
-    <div class="claim-card" data-claim-id="${index}" data-platform="${platform}" data-category="${category}" data-velocity="${velocityStatus}">
-        <div class="claim-card-header">
-            <div class="claim-badges">
-                ${velocityBadge}
-                <span class="badge badge-category">${categoryIcon} ${this.capitalizeFirst(
-        category
-      )}</span>
-            </div>
-            <div class="claim-rating ${ratingClass}">
-                ${rating}
-            </div>
-        </div>
-        
-        <div class="claim-text">${this.escapeHtml(claimText)}</div>
-        
-        ${
-          claim.description
-            ? `<div class="claim-description">${this.escapeHtml(
-                claim.description
-              )}</div>`
-            : ""
-        }
-        
-        <div class="claim-metrics">
-            ${
-              sharesPerHour > 0
-                ? `
-            <div class="metric-item">
-                <svg class="metric-icon" width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z"/></svg>
-                <span class="metric-value">${this.formatNumber(
-                  sharesPerHour
-                )}</span>
-                <span>/hr</span>
-            </div>`
-                : ""
-            }
-            
-            <div class="metric-item">
-                ${platformIcon}
-                <span class="metric-value">${source}</span>
-            </div>
-            
-            <div class="metric-item">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
-                <span>${timeAgo}</span>
-            </div>
-        </div>
-        
-        <div class="claim-actions">
-            <a href="${url}" target="_blank" class="action-btn action-source">
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                View Source
-            </a>
-            <button class="action-btn action-investigate" data-url="${url}">
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                Investigate
-            </button>
-        </div>
-    </div>
-`;
+      return (
+        '<div class="claim-card" data-claim-id="' +
+        index +
+        '" data-platform="' +
+        platform +
+        '" data-category="' +
+        category +
+        '" data-velocity="' +
+        velocityStatus +
+        '">' +
+        '<div class="claim-card-header">' +
+        '<div class="claim-badges">' +
+        velocityBadge +
+        '<span class="badge badge-category">' +
+        categoryIcon +
+        " " +
+        Dashboard.capitalizeFirst(category) +
+        "</span>" +
+        "</div>" +
+        '<div class="claim-rating ' +
+        ratingClass +
+        '">' +
+        rating +
+        "</div>" +
+        "</div>" +
+        '<div class="claim-text">' +
+        Dashboard.escapeHtml(claimText) +
+        "</div>" +
+        (claim.description
+          ? '<div class="claim-description">' +
+            Dashboard.escapeHtml(claim.description) +
+            "</div>"
+          : "") +
+        '<div class="claim-metrics">' +
+        (sharesPerHour > 0
+          ? '<div class="metric-item">' +
+            '<svg class="metric-icon" width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z"/></svg>' +
+            '<span class="metric-value">' +
+            Dashboard.formatNumber(sharesPerHour) +
+            "</span>" +
+            "<span>/hr</span>" +
+            "</div>"
+          : "") +
+        '<div class="metric-item">' +
+        platformIcon +
+        '<span class="metric-value">' +
+        source +
+        "</span>" +
+        "</div>" +
+        '<div class="metric-item">' +
+        '<svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>' +
+        "<span>" +
+        timeAgo +
+        "</span>" +
+        "</div>" +
+        "</div>" +
+        '<div class="claim-actions">' +
+        '<a href="' +
+        url +
+        '" target="_blank" class="action-btn action-source">' +
+        '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>' +
+        " View Source" +
+        "</a>" +
+        '<button class="action-btn action-investigate" data-url="' +
+        url +
+        '">' +
+        '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>' +
+        " Investigate" +
+        "</button>" +
+        "</div>" +
+        "</div>"
+      );
     },
 
     /**
@@ -509,13 +559,15 @@
      * Show error message
      */
     showError: function (message) {
-      $("#claimsGrid").html(`
-            <div class="empty-state">
-                <div class="empty-icon">⚠️</div>
-                <h3 class="empty-title">Error</h3>
-                <p class="empty-message">${message}</p>
-            </div>
-        `);
+      $("#claimsGrid").html(
+        '<div class="empty-state">' +
+          '<div class="empty-icon">⚠️</div>' +
+          '<h3 class="empty-title">Error</h3>' +
+          '<p class="empty-message">' +
+          message +
+          "</p>" +
+          "</div>"
+      );
     },
 
     /**
@@ -570,7 +622,7 @@
     escapeHtml: function (text) {
       const div = document.createElement("div");
       div.textContent = text;
-      return div.innerHTML;
+      return div.innerHTML();
     },
   };
 
