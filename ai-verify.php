@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.38
+ * Version: 2.0.39
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.38');
+define('AI_VERIFY_VERSION', '2.0.39');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -98,14 +98,22 @@ class AI_Verify {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/trending-helpers.php';
         }
 
-        // Load external fact-check aggregator
-        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/external-factcheck-aggregator.php')) {
-            require_once AI_VERIFY_PLUGIN_DIR . 'includes/external-factcheck-aggregator.php';
+        // NEW CODE - ADD:
+        // Load Intelligence Dashboard (Phase 1 & 2)
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trends-database-upgrade.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/trends-database-upgrade.php';
         }
-        
-        // Load trending page system
-        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trending-page-system.php')) {
-            require_once AI_VERIFY_PLUGIN_DIR . 'includes/trending-page-system.php';
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trends-velocity.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/trends-velocity.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/social-integrations/rss-aggregator-enhanced.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/social-integrations/rss-aggregator-enhanced.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/social-integrations/twitter-monitor.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/social-integrations/twitter-monitor.php';
+        }
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/intelligence-dashboard.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/intelligence-dashboard.php';
         }
         
         // Load trends system files
@@ -149,11 +157,6 @@ class AI_Verify {
         if (class_exists('AI_Verify_Factcheck_System')) {
             AI_Verify_Factcheck_System::init();
         }
-
-        // Initialize trending page system
-        if (class_exists('AI_Verify_Trending_Page_System')) {
-            AI_Verify_Trending_Page_System::init();
-        }
         
         // Initialize trends system
         if (class_exists('AI_Verify_Trends_Integration')) {
@@ -164,6 +167,11 @@ class AI_Verify {
         }
         if (class_exists('AI_Verify_Trends_Widget')) {
             AI_Verify_Trends_Widget::init();
+        }
+
+        // Initialize Intelligence Dashboard
+        if (class_exists('AI_Verify_Intelligence_Dashboard')) {
+            AI_Verify_Intelligence_Dashboard::init();
         }
     }
     
@@ -364,4 +372,16 @@ register_activation_hook(__FILE__, function() {
     if (class_exists('AI_Verify_Factcheck_Database')) {
         AI_Verify_Factcheck_Database::create_tables();
     }
+
+    // NEW: Upgrade database for Intelligence Dashboard
+    if (class_exists('AI_Verify_Trends_Database_Upgrade')) {
+        AI_Verify_Trends_Database_Upgrade::upgrade_to_v2();
+    }
+    
+    // NEW: Create initial velocity snapshots
+    if (class_exists('AI_Verify_Velocity_Tracker')) {
+        wp_schedule_single_event(time() + 60, 'ai_verify_calculate_velocity');
+    }
+    
+    error_log('AI Verify: Intelligence Dashboard activated');
 });

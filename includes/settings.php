@@ -46,6 +46,7 @@ class AI_Verify_Settings {
         register_setting('ai_verify_settings', 'ai_verify_firecrawl_key');
         register_setting('ai_verify_settings', 'ai_verify_scraping_service');
         register_setting('ai_verify_settings', 'ai_verify_tavily_key'); // NEW
+        register_setting('ai_verify_settings', 'ai_verify_twitter_api_key'); // Twitter API Key
     }
     
     public static function render_settings_page() {
@@ -76,6 +77,7 @@ class AI_Verify_Settings {
             update_option('ai_verify_firecrawl_key', sanitize_text_field($_POST['ai_verify_firecrawl_key']));
             update_option('ai_verify_scraping_service', sanitize_text_field($_POST['ai_verify_scraping_service']));
             update_option('ai_verify_tavily_key', sanitize_text_field($_POST['ai_verify_tavily_key'])); // NEW
+            update_option('ai_verify_twitter_api_key', sanitize_text_field($_POST['ai_verify_twitter_api_key'])); // Twitter API Key
 
             echo '<div class="notice notice-success"><p><strong>✓ Settings saved successfully!</strong></p></div>';
         }
@@ -100,6 +102,7 @@ class AI_Verify_Settings {
         $firecrawl_key = get_option('ai_verify_firecrawl_key', '');
         $scraping_service = get_option('ai_verify_scraping_service', 'jina');
         $tavily_key = get_option('ai_verify_tavily_key', ''); // NEW
+        $twitter_key = get_option('ai_verify_twitter_api_key', '');
         ?>
         
         <div class="wrap">
@@ -180,6 +183,30 @@ class AI_Verify_Settings {
                                 <strong>RECOMMENDED FOR OPENROUTER:</strong> Get FREE key from <a href="https://tavily.com" target="_blank">Tavily.com</a><br>
                                 💰 FREE: 1000 searches/month | AI-optimized search for fact-checking<br>
                                 Used when OpenRouter is selected as fact-check provider
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr style="background: #fff9e6;">
+                        <th scope="row"><label for="ai_verify_twitter_api_key">🐦 TwitterAPI.io Key (Optional)</label></th>
+                        <td>
+                            <input type="text" name="ai_verify_twitter_api_key" id="ai_verify_twitter_api_key" value="<?php echo esc_attr($twitter_key); ?>" class="regular-text">
+                            <p class="description">
+                                <strong>OPTIONAL:</strong> Get API key from <a href="https://twitterapi.io" target="_blank">TwitterAPI.io</a><br>
+                                💰 Cost: $49/mo for 5K requests | Track viral claims on Twitter<br>
+                                ⚠️ Leave blank to use only RSS + Google + Internal data
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr><th colspan="2"><h2>🚀 Intelligence Dashboard</h2></th></tr>
+                    <tr>
+                        <th scope="row"><label>Dashboard Shortcode</label></th>
+                        <td>
+                            <code>[ai_verify_intelligence_dashboard]</code>
+                            <p class="description">
+                                Create a new page and add this shortcode to display the Intelligence Dashboard.<br>
+                                <strong>Recommended:</strong> Set page to full-width template for best experience.
                             </p>
                         </td>
                     </tr>
