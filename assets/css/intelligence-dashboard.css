@@ -1917,6 +1917,7 @@ input,
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: left;
+  line-height: 1;
 }
 
 .chat-example-prompt:hover {
