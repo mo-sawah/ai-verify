@@ -38,6 +38,10 @@ class AI_Verify_Factcheck_Ajax {
         add_action('wp_ajax_ai_verify_check_status', array(__CLASS__, 'check_processing_status'));
         add_action('wp_ajax_nopriv_ai_verify_check_status', array(__CLASS__, 'check_processing_status'));
         
+        // NEW: Add public-facing AJAX action for the assistant shortcode
+        add_action('wp_ajax_ai_verify_public_chat_message', array(__CLASS__, 'handle_public_chat_message'));
+        add_action('wp_ajax_nopriv_ai_verify_public_chat_message', array(__CLASS__, 'handle_public_chat_message'));
+
         // Create table on init if doesn't exist
         self::maybe_create_access_table();
     }
@@ -561,5 +565,117 @@ class AI_Verify_Factcheck_Ajax {
         </html>
         <?php
         return ob_get_clean();
+    }
+
+    /**
+     * NEW: Handle public chat message from the assistant shortcode
+     * This is a SECURE endpoint with rate-limiting and restricted tool access.
+     */
+    public static function handle_public_chat_message() {
+        check_ajax_referer('ai_verify_public_chat_nonce', 'nonce');
+
+        // 1. Rate Limiting to prevent abuse
+        $ip = self::get_user_ip();
+        $transient_key = 'ai_verify_chat_limit_' . $ip;
+        $request_count = get_transient($transient_key);
+
+        if ($request_count === false) {
+            set_transient($transient_key, 1, MINUTE_IN_SECONDS);
+        } elseif ($request_count > 15) { // Limit to 15 requests per minute
+            wp_send_json_error(array('message' => 'You are sending requests too quickly. Please wait a moment.'));
+            return;
+        } else {
+            set_transient($transient_key, $request_count + 1, MINUTE_IN_SECONDS);
+        }
+
+        // 2. Sanitize inputs
+        $message = sanitize_text_field($_POST['message'] ?? '');
+        if (empty($message)) {
+            wp_send_json_error(array('message' => 'Message cannot be empty.'));
+            return;
+        }
+
+        // 3. Process with a RESTRICTED toolset
+        try {
+            $response = self::process_public_chat_message($message);
+            wp_send_json_success($response);
+        } catch (Exception $e) {
+            error_log('AI Verify Public Chat Error: ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'An error occurred while processing your request. Please try again.'));
+        }
+    }
+
+    /**
+     * NEW: Process a message from the public using a safe, limited set of tools.
+     */
+    private static function process_public_chat_message($user_message) {
+        $openrouter_key = get_option('ai_verify_openrouter_key');
+        if (empty($openrouter_key)) {
+            throw new Exception('AI provider is not configured.');
+        }
+
+        $tools_used = [];
+        $sources = [];
+        $tool_results_context = '';
+        
+        // Check if the message contains a URL for analysis
+        if (preg_match('/https?:\/\/[^\s]+/', $user_message, $matches)) {
+            $url = esc_url_raw($matches[0]);
+            if (class_exists('AI_Verify_Factcheck_Scraper')) {
+                $scraped = AI_Verify_Factcheck_Scraper::scrape_url($url);
+                if (!is_wp_error($scraped) && !empty($scraped['content'])) {
+                    $tools_used[] = 'URL Analyzer';
+                    $sources[] = ['url' => $url, 'title' => $scraped['title'] ?? 'Scraped Content'];
+                    $tool_results_context .= "\n\n=== Scraped Content from {$url} ===\n" . mb_substr($scraped['content'], 0, 4000); // Limit context size
+                }
+            }
+        } 
+        // Check for a specific, safe database query
+        elseif (stripos($user_message, 'viral') !== false || stripos($user_message, 'trending') !== false) {
+            if (class_exists('AI_Verify_Trends_Database')) {
+                $top_claims = AI_Verify_Trends_Database::get_trending_claims(3, 7); // Get top 3 from last 7 days
+                if (!empty($top_claims)) {
+                    $tools_used[] = 'Trends Database';
+                    $tool_results_context .= "\n\n=== Top Trending Claims from Database ===\n";
+                    foreach ($top_claims as $claim) {
+                        $tool_results_context .= "- {$claim['claim_text']} (Velocity: {$claim['velocity_status']})\n";
+                    }
+                }
+            }
+        }
+
+        // Prepare message for the AI
+        $system_prompt = "You are a helpful, public-facing AI fact-checking assistant for our website. Your goal is to provide clear, neutral, and helpful answers. Analyze the provided context if any, but do not mention the context source (like 'Scraped Content'). Just use it to form your answer. Keep responses concise and use markdown for formatting.";
+        
+        $messages = [
+            ['role' => 'system', 'content' => $system_prompt],
+            ['role' => 'user', 'content' => $user_message . $tool_results_context]
+        ];
+
+        // Call OpenRouter API (or your preferred provider)
+        $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', [
+            'timeout' => 45,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $openrouter_key,
+                'Content-Type' => 'application/json',
+            ],
+            'body' => json_encode([
+                'model' => 'anthropic/claude-3.5-sonnet',
+                'messages' => $messages,
+                'max_tokens' => 1024,
+            ])
+        ]);
+
+        if (is_wp_error($response)) throw new Exception($response->get_error_message());
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (isset($body['error'])) throw new Exception($body['error']['message']);
+
+        $assistant_message = $body['choices'][0]['message']['content'] ?? 'I was unable to generate a response.';
+
+        return [
+            'response'   => $assistant_message,
+            'tools_used' => array_unique($tools_used),
+            'sources'    => $sources,
+        ];
     }
 }

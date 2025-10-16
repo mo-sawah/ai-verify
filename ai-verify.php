@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.67
+ * Version: 2.0.68
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.67');
+define('AI_VERIFY_VERSION', '2.0.68');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -151,6 +151,10 @@ class AI_Verify {
         if (is_admin() && file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/assistant-page.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/assistant-page.php';
         }
+
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/assistant-shortcode.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/assistant-shortcode.php';
+        }
         
         // Register hooks
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
@@ -205,6 +209,10 @@ class AI_Verify {
 
         if (class_exists('AI_Verify_Assistant_Page')) {
             AI_Verify_Assistant_Page::init();
+        }
+
+        if (class_exists('AI_Verify_Assistant_Shortcode')) {
+            AI_Verify_Assistant_Shortcode::init();
         }
     }
     
