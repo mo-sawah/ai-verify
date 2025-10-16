@@ -2005,3 +2005,7 @@ input,
 .s-dark .user-message .message-text {
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
+
+.propaganda-claims-list .claim-card {
+  margin-bottom: 10px;
+}

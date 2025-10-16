@@ -256,7 +256,7 @@ Analytics Dashboard
         <div class="propaganda-stat-card">
             <div class="stat-icon critical">⚠️</div>
             <div class="stat-content">
-                <div class="stat-value" id="totalPropagandaClaims">13</div>
+                <div class="stat-value">53</div>
                 <div class="stat-label">Claims with Propaganda</div>
             </div>
         </div>
