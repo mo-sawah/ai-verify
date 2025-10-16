@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.56
+ * Version: 2.0.57
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.56');
+define('AI_VERIFY_VERSION', '2.0.57');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -207,26 +207,6 @@ class AI_Verify {
         // Only load verification tools CSS/JS on singular posts
         if (!is_singular('post')) {
             return;
-        }
-
-        // Enqueue chat assistant assets
-        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/css/chat-assistant.css')) {
-            wp_enqueue_style(
-                'ai-verify-chat-assistant',
-                AI_VERIFY_PLUGIN_URL . 'assets/css/chat-assistant.css',
-                array('ai-verify-intelligence-dashboard'),
-                AI_VERIFY_VERSION
-            );
-        }
-        
-        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/js/chat-assistant.js')) {
-            wp_enqueue_script(
-                'ai-verify-chat-assistant',
-                AI_VERIFY_PLUGIN_URL . 'assets/js/chat-assistant.js',
-                array('jquery', 'ai-verify-intelligence-dashboard'),
-                AI_VERIFY_VERSION,
-                true
-            );
         }
         
         wp_enqueue_style(

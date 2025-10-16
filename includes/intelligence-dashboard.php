@@ -92,6 +92,17 @@ class AI_Verify_Intelligence_Dashboard {
             true
         );
         
+        // STEP 4: Load Chat Assistant JS (depends on dashboard)
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/js/chat-assistant.js')) {
+            wp_enqueue_script(
+                'ai-verify-chat-assistant',
+                AI_VERIFY_PLUGIN_URL . 'assets/js/chat-assistant.js',
+                array('jquery', 'ai-verify-intelligence-dashboard'),
+                AI_VERIFY_VERSION,
+                true
+            );
+        }
+        
         // Localize script
         wp_localize_script('ai-verify-intelligence-dashboard', 'aiVerifyDashboard', array(
             'ajax_url' => admin_url('admin-ajax.php'),
@@ -108,6 +119,16 @@ class AI_Verify_Intelligence_Dashboard {
             array(),
             AI_VERIFY_VERSION
         );
+        
+        // Chat Assistant CSS
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/css/chat-assistant.css')) {
+            wp_enqueue_style(
+                'ai-verify-chat-assistant',
+                AI_VERIFY_PLUGIN_URL . 'assets/css/chat-assistant.css',
+                array('ai-verify-intelligence-dashboard'),
+                AI_VERIFY_VERSION
+            );
+        }
     }
     
     /**
@@ -628,24 +649,41 @@ class AI_Verify_Intelligence_Dashboard {
             $timeframe_days
         ));
 
-        // Get claims with propaganda
+        // FIXED: Check BOTH metadata and propaganda_techniques columns
         $propaganda_claims_results = $wpdb->get_results($wpdb->prepare(
-            "SELECT claim_text, propaganda_techniques, category, avg_credibility_score, velocity_status, check_count 
+            "SELECT claim_text, metadata, propaganda_techniques, category, avg_credibility_score, velocity_status, check_count 
             FROM $table_trends 
-            WHERE propaganda_techniques IS NOT NULL AND propaganda_techniques != '[]' AND propaganda_techniques != ''
-            AND last_seen >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+            WHERE last_seen >= DATE_SUB(NOW(), INTERVAL %d DAY)",
             $timeframe_days
         ));
 
-        $propaganda_claims_count = count($propaganda_claims_results);
-        $propaganda_percentage = ($total_claims > 0) ? round(($propaganda_claims_count / $total_claims) * 100) : 0;
-        
+        $propaganda_claims_count = 0;
         $top_techniques = [];
         $claims_with_propaganda = [];
 
         foreach ($propaganda_claims_results as $claim) {
-            $techniques = json_decode($claim->propaganda_techniques, true);
-            if (is_array($techniques) && !empty($techniques)) {
+            $techniques = [];
+            
+            // Try propaganda_techniques column first
+            if (!empty($claim->propaganda_techniques)) {
+                $decoded = json_decode($claim->propaganda_techniques, true);
+                if (is_array($decoded) && !empty($decoded)) {
+                    $techniques = $decoded;
+                }
+            }
+            
+            // Fallback to metadata column
+            if (empty($techniques) && !empty($claim->metadata)) {
+                $metadata = json_decode($claim->metadata, true);
+                if (isset($metadata['propaganda_techniques']) && is_array($metadata['propaganda_techniques'])) {
+                    $techniques = $metadata['propaganda_techniques'];
+                }
+            }
+            
+            // If we found techniques, process them
+            if (!empty($techniques)) {
+                $propaganda_claims_count++;
+                
                 $claims_with_propaganda[] = [
                     'claim' => $claim->claim_text,
                     'techniques' => $techniques,
@@ -654,6 +692,7 @@ class AI_Verify_Intelligence_Dashboard {
                     'velocity' => $claim->velocity_status,
                     'checks' => $claim->check_count
                 ];
+                
                 foreach ($techniques as $technique) {
                     if (!isset($top_techniques[$technique])) {
                         $top_techniques[$technique] = 0;
@@ -663,21 +702,37 @@ class AI_Verify_Intelligence_Dashboard {
             }
         }
         
+        $propaganda_percentage = ($total_claims > 0) ? round(($propaganda_claims_count / $total_claims) * 100) : 0;
+        
         arsort($top_techniques);
 
-        // For this example, we'll add placeholder definitions.
+        // Propaganda technique definitions
         $definitions = [
-            'Appeal to Fear' => 'Exploiting people\'s fears to manipulate them.',
-            'Bandwagon' => 'Creating the impression that everyone is doing it, so you should too.',
-            'Name-Calling' => 'Using negative labels to discredit someone or something.',
-            'Glittering Generalities' => 'Using vague, emotionally appealing words without concrete evidence.'
+            'Appeal to Fear' => 'Uses fear or threats to persuade audience',
+            'Appeal to Authority' => 'Claims something is true because an authority says so',
+            'Bandwagon' => 'Appeals to desire to follow the crowd',
+            'Black-and-White Fallacy' => 'Presents only two options when more exist',
+            'Causal Oversimplification' => 'Assumes single cause for complex issue',
+            'Doubt' => 'Questions credibility without evidence',
+            'Exaggeration/Minimization' => 'Makes things bigger or smaller than reality',
+            'Flag-Waving' => 'Appeals to patriotism or group identity',
+            'Loaded Language' => 'Uses emotionally charged words',
+            'Name Calling/Labeling' => 'Gives negative labels to discredit',
+            'Obfuscation' => 'Uses confusing or vague language',
+            'Red Herring' => 'Introduces irrelevant information',
+            'Repetition' => 'Repeats message to make it seem true',
+            'Slogans' => 'Uses catchy phrases instead of reasoning',
+            'Straw Man' => 'Misrepresents opponent\'s argument',
+            'Whataboutism' => 'Deflects by pointing to others\' wrongdoing'
         ];
+
+        error_log("AI Verify Propaganda: Found {$propaganda_claims_count} claims with propaganda out of {$total_claims} total");
 
         $data = [
             'propaganda_percentage' => $propaganda_percentage,
             'propaganda_claims' => $propaganda_claims_count,
-            'top_techniques' => array_slice($top_techniques, 0, 5, true), // Return top 5
-            'claims_with_propaganda' => array_slice($claims_with_propaganda, 0, 5), // Return 5 sample claims
+            'top_techniques' => array_slice($top_techniques, 0, 10, true),
+            'claims_with_propaganda' => array_slice($claims_with_propaganda, 0, 20),
             'definitions' => $definitions,
         ];
         
