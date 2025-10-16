@@ -107,13 +107,14 @@
       this.clearChatMessages();
       this.addMessage(
         "assistant",
-        "Hello! I'm your advanced AI fact-checking assistant with access to:\n\n" +
-          "âœ… **Real-time web search** (Tavily)\n" +
-          "âœ… **Website analysis** (Firecrawl)\n" +
-          "âœ… **Fact-check database** (Thousands of claims)\n" +
-          "âœ… **All published articles** on this site\n" +
-          "âœ… **Propaganda detection** & credibility analysis\n\n" +
-          "How can I help you investigate today?"
+        "👋 **Welcome! I'm your AI fact-checking partner.**\n\n" +
+          "I can help you:\n\n" +
+          "🔍 **Verify claims** - Search our database of verified fact-checks\n" +
+          "🌐 **Analyze websites** - Paste any URL for instant credibility analysis\n" +
+          "📰 **Research topics** - Access real-time web search and news\n" +
+          "🎯 **Detect propaganda** - Identify manipulation techniques in content\n" +
+          "📚 **Search articles** - Find relevant content from our knowledge base\n\n" +
+          "_Just ask a question, paste a URL, or try one of the examples below!_"
       );
 
       this.updateSidebarUI();
