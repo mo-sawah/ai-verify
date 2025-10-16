@@ -247,7 +247,7 @@ Analytics Dashboard
         </h2>
         <div class="section-meta">
             <span class="propaganda-stat">
-                <strong id="propagandaPercentage">65%</strong> of claims contain propaganda
+                <strong id="propagandaPercentage1">65%</strong> of claims contain propaganda
             </span>
         </div>
     </div>
@@ -256,7 +256,7 @@ Analytics Dashboard
         <div class="propaganda-stat-card">
             <div class="stat-icon critical">⚠️</div>
             <div class="stat-content">
-                <div class="stat-value">53</div>
+                <div class="stat-value" id="totalPropagandaClaims1">13</div>
                 <div class="stat-label">Claims with Propaganda</div>
             </div>
         </div>
@@ -264,7 +264,7 @@ Analytics Dashboard
         <div class="propaganda-stat-card">
             <div class="stat-icon high">🎯</div>
             <div class="stat-content">
-                <div class="stat-value" id="uniqueTechniques">5</div>
+                <div class="stat-value" id="uniqueTechniques1">5</div>
                 <div class="stat-label">Unique Techniques</div>
             </div>
         </div>
@@ -272,14 +272,14 @@ Analytics Dashboard
         <div class="propaganda-stat-card">
             <div class="stat-icon moderate">📊</div>
             <div class="stat-content">
-                <div class="stat-value" id="mostCommonTechnique">Ad Hominem</div>
+                <div class="stat-value" id="mostCommonTechnique1">Ad Hominem</div>
                 <div class="stat-label">Most Common</div>
             </div>
         </div>
     </div>
 
     <div class="propaganda-content">
-        <div class="propaganda-techniques-list" id="propagandaTechniquesList">
+        <div class="propaganda-techniques-list" id="propagandaTechniquesList1">
             <div class="technique-item">
                 <div class="technique-info">
                     <span class="technique-name">Ad Hominem</span>
