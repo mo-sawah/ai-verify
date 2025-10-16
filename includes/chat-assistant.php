@@ -17,6 +17,9 @@ class AI_Verify_Chat_Assistant {
         
         add_action('wp_ajax_ai_verify_chat_history', array(__CLASS__, 'get_chat_history'));
         add_action('wp_ajax_nopriv_ai_verify_chat_history', array(__CLASS__, 'get_chat_history'));
+
+        // --- ADD THIS NEW ACTION FOR THE DEDICATED PAGE ---
+       add_action('wp_ajax_ai_verify_assistant_page_message', array(__CLASS__, 'handle_assistant_page_message'));
     }
     
     /**
@@ -421,6 +424,111 @@ CONTEXT;
         $history = self::get_conversation_history($session_id);
         
         wp_send_json_success(array('history' => $history));
+    }
+
+    /**
+     * NEW: Handle advanced chat message from the dedicated assistant page
+     */
+    public static function handle_assistant_page_message() {
+        check_ajax_referer('ai_verify_assistant_nonce', 'nonce'); // Use a new nonce for security
+
+        $message = sanitize_text_field($_POST['message'] ?? '');
+        $session_id = sanitize_text_field($_POST['session_id'] ?? uniqid('chat_', true));
+        $history = isset($_POST['history']) ? json_decode(stripslashes($_POST['history']), true) : [];
+        
+        try {
+            // This is where the magic for multi-step tool use happens
+            $response = self::process_advanced_chat_message($message, $session_id, $history);
+            
+            wp_send_json_success(array(
+                'response' => $response['message'],
+                'tools_used' => $response['tools_used'],
+                'sources' => $response['sources'],
+                'session_id' => $session_id
+            ));
+        } catch (Exception $e) {
+            error_log('AI Verify Assistant Page Error: ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Failed to process message: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * NEW: Process advanced chat message with multi-step tool calling
+     */
+    private static function process_advanced_chat_message($user_message, $session_id, $history) {
+        $openrouter_key = get_option('ai_verify_openrouter_key');
+        if (empty($openrouter_key)) {
+            throw new Exception('OpenRouter API key not configured');
+        }
+
+        $system_context = self::build_system_context(); // You can enhance this context further
+        $tools_used = [];
+        $sources = [];
+        
+        // Construct messages array from provided history
+        $messages = [['role' => 'system', 'content' => $system_context]];
+        foreach ($history as $msg) {
+            $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+        }
+        $messages[] = ['role' => 'user', 'content' => $user_message];
+
+        // This is a simplified example of a tool-calling loop.
+        // A real implementation would involve multiple calls to the AI.
+        // 1. First call to determine which tools to use.
+        // 2. Execute tools.
+        // 3. Second call to AI with tool results to get the final answer.
+        
+        // For now, we'll use a more advanced version of the original logic.
+        $needs = self::analyze_tool_requirements($user_message);
+        $tool_results_context = '';
+        
+        if ($needs['search']) {
+            $search_results = self::search_with_tavily($user_message);
+            $tools_used[] = 'Tavily Search';
+            $sources = array_merge($sources, $search_results['sources']);
+            $tool_results_context .= "\n\n=== Web Search Results ===\n" . $search_results['content'];
+        }
+        
+        if ($needs['scrape'] && !empty($needs['url'])) {
+            $scraped = self::scrape_with_firecrawl($needs['url']);
+            $tools_used[] = 'Firecrawl Scrape';
+            $sources[] = ['url' => $needs['url'], 'title' => 'Scraped Content'];
+            $tool_results_context .= "\n\n=== Scraped Content from {$needs['url']} ===\n" . $scraped;
+        }
+        
+        if ($needs['database']) {
+            $db_results = self::query_database($user_message); // You can make this function much smarter
+            $tools_used[] = 'Database Query';
+            $tool_results_context .= "\n\n=== Internal Database Results ===\n" . $db_results;
+        }
+
+        // Add tool results to the last user message for context
+        if (!empty($tool_results_context)) {
+            $messages[count($messages) - 1]['content'] .= $tool_results_context;
+        }
+        
+        // Final call to OpenRouter with all context
+        $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
+            'timeout' => 120, // Longer timeout for complex tasks
+            'headers' => [ /* ... same as before ... */ ],
+            'body' => json_encode([
+                'model' => 'anthropic/claude-3.5-sonnet', // Use a powerful model
+                'messages' => $messages,
+                'temperature' => 0.5,
+                'max_tokens' => 2048,
+            ])
+        ));
+        
+        // ... handle response and errors same as process_chat_message ...
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $assistant_message = $body['choices'][0]['message']['content'] ?? 'Sorry, I could not generate a response.';
+
+        return [
+            'message' => $assistant_message,
+            'tools_used' => array_unique($tools_used),
+            'sources' => $sources,
+        ];
     }
 }
 

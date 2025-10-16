@@ -2009,3 +2009,7 @@ input,
 .propaganda-claims-list .claim-card {
   margin-bottom: 10px;
 }
+
+.s-dark .action-btn {
+  color: #000;
+}

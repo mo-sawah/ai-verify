@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.66
+ * Version: 2.0.67
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.66');
+define('AI_VERIFY_VERSION', '2.0.67');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -147,6 +147,10 @@ class AI_Verify {
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trends-widget.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/trends-widget.php';
         }
+
+        if (is_admin() && file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/assistant-page.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/assistant-page.php';
+        }
         
         // Register hooks
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
@@ -197,6 +201,10 @@ class AI_Verify {
         // Initialize Intelligence Dashboard
         if (class_exists('AI_Verify_Intelligence_Dashboard')) {
             AI_Verify_Intelligence_Dashboard::init();
+        }
+
+        if (class_exists('AI_Verify_Assistant_Page')) {
+            AI_Verify_Assistant_Page::init();
         }
     }
     
@@ -308,6 +316,30 @@ class AI_Verify {
             array(),
             AI_VERIFY_VERSION
         );
+
+        // NEW: Enqueue assets for our dedicated assistant page
+        if ('toplevel_page_ai-verify-assistant' === $hook) {
+            wp_enqueue_style(
+                'ai-verify-assistant-page',
+                AI_VERIFY_PLUGIN_URL . 'assets/css/assistant-page.css',
+                array(),
+                AI_VERIFY_VERSION
+            );
+
+            wp_enqueue_script(
+                'ai-verify-assistant-page',
+                AI_VERIFY_PLUGIN_URL . 'assets/js/assistant-page.js',
+                array('jquery'),
+                AI_VERIFY_VERSION,
+                true
+            );
+
+            // Localize script data, including the new nonce
+            wp_localize_script('ai-verify-assistant-page', 'aiVerifyDashboard', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'assistant_nonce' => wp_create_nonce('ai_verify_assistant_nonce')
+            ));
+        }
     }
     
     public function render_verification_tools($atts = array()) {
