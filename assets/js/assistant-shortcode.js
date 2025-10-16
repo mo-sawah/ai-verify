@@ -135,7 +135,7 @@
       $("#chatSendBtn").prop("disabled", true);
       $("#stopGeneratingBtn").show();
 
-      // Add user message to UI
+      // Add user message to UI and history
       this.addMessage("user", messageText);
 
       // Show typing indicator
@@ -144,8 +144,9 @@
       // Create abort controller
       this.abortController = new AbortController();
 
-      // Prepare conversation history (last 20 messages)
-      const history = this.sessions[this.currentSessionId].history.slice(-20);
+      // Prepare conversation history (last 20 messages, excluding the current one we just added)
+      const allHistory = this.sessions[this.currentSessionId].history;
+      const history = allHistory.slice(0, -1).slice(-20); // Exclude last message (current), then take last 20
 
       // Send AJAX request
       $.ajax({
