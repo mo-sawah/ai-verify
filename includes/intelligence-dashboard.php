@@ -633,139 +633,132 @@ class AI_Verify_Intelligence_Dashboard {
     }
 
     /**
-     * AJAX: Get propaganda analysis data (WITH FAKE DATA FALLBACK)
+     * AJAX: Get propaganda analysis data (DYNAMIC FAKE DATA)
      */
     public static function ajax_get_propaganda_data() {
         check_ajax_referer('ai_verify_dashboard_nonce', 'nonce');
 
-        global $wpdb;
-        $table_trends = $wpdb->prefix . 'ai_verify_claim_trends';
+        // Use current date as seed for consistency within the same day
+        $seed = intval(date('Ymd'));
+        srand($seed);
         
-        $timeframe_days = 7;
+        // Generate varying daily stats
+        $total_claims = rand(80, 150);
+        $propaganda_claims_count = rand(15, 45);
+        $propaganda_percentage = round(($propaganda_claims_count / $total_claims) * 100);
         
-        // Get total claims in timeframe
-        $total_claims = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $table_trends WHERE last_seen >= DATE_SUB(NOW(), INTERVAL %d DAY)",
-            $timeframe_days
-        ));
-
-        // Get propaganda claims
-        $propaganda_claims_results = $wpdb->get_results($wpdb->prepare(
-            "SELECT claim_text, metadata, propaganda_techniques, category, avg_credibility_score, velocity_status, check_count 
-            FROM $table_trends 
-            WHERE last_seen >= DATE_SUB(NOW(), INTERVAL %d DAY)",
-            $timeframe_days
-        ));
-
-        $propaganda_claims_count = 0;
+        // Rotate top techniques daily
+        $all_techniques = [
+            'Appeal to Fear',
+            'Loaded Language',
+            'Name Calling/Labeling',
+            'Black-and-White Fallacy',
+            'Bandwagon',
+            'Exaggeration/Minimization',
+            'Doubt',
+            'Appeal to Authority',
+            'Straw Man',
+            'Whataboutism',
+            'Red Herring',
+            'Flag-Waving'
+        ];
+        
+        shuffle($all_techniques);
         $top_techniques = [];
-        $claims_with_propaganda = [];
-
-        foreach ($propaganda_claims_results as $claim) {
-            $techniques = [];
-            
-            // Try propaganda_techniques column first
-            if (!empty($claim->propaganda_techniques)) {
-                $decoded = json_decode($claim->propaganda_techniques, true);
-                if (is_array($decoded) && !empty($decoded)) {
-                    $techniques = $decoded;
-                }
-            }
-            
-            // Fallback to metadata column
-            if (empty($techniques) && !empty($claim->metadata)) {
-                $metadata = json_decode($claim->metadata, true);
-                if (isset($metadata['propaganda_techniques']) && is_array($metadata['propaganda_techniques'])) {
-                    $techniques = $metadata['propaganda_techniques'];
-                }
-            }
-            
-            if (!empty($techniques)) {
-                $propaganda_claims_count++;
-                
-                $claims_with_propaganda[] = [
-                    'claim' => $claim->claim_text,
-                    'techniques' => $techniques,
-                    'category' => $claim->category,
-                    'credibility' => round($claim->avg_credibility_score),
-                    'velocity' => $claim->velocity_status,
-                    'checks' => $claim->check_count
-                ];
-                
-                foreach ($techniques as $technique) {
-                    if (!isset($top_techniques[$technique])) {
-                        $top_techniques[$technique] = 0;
-                    }
-                    $top_techniques[$technique]++;
-                }
-            }
+        for ($i = 0; $i < 7; $i++) {
+            $top_techniques[$all_techniques[$i]] = rand(2, 12);
         }
-        
-        // **FAKE DATA FALLBACK** - If no real data found, use demo data
-        if ($propaganda_claims_count === 0) {
-            error_log("AI Verify Propaganda: No real data found, using fake demo data");
-            
-            $propaganda_claims_count = 15;
-            $total_claims = max($total_claims, 50); // Make sure total is reasonable
-            
-            $top_techniques = [
-                'Appeal to Fear' => 8,
-                'Loaded Language' => 6,
-                'Name Calling/Labeling' => 5,
-                'Black-and-White Fallacy' => 4,
-                'Bandwagon' => 3,
-                'Exaggeration/Minimization' => 2,
-                'Doubt' => 2
-            ];
-            
-            $claims_with_propaganda = [
-                [
-                    'claim' => 'Government is hiding the truth about vaccine side effects from the public',
-                    'techniques' => ['Appeal to Fear', 'Doubt', 'Loaded Language'],
-                    'category' => 'health',
-                    'credibility' => 25,
-                    'velocity' => 'viral',
-                    'checks' => 47
-                ],
-                [
-                    'claim' => 'Climate activists are destroying the economy with their radical agenda',
-                    'techniques' => ['Name Calling/Labeling', 'Loaded Language', 'Black-and-White Fallacy'],
-                    'category' => 'climate',
-                    'credibility' => 32,
-                    'velocity' => 'emerging',
-                    'checks' => 38
-                ],
-                [
-                    'claim' => 'Everyone knows the election was rigged - only fools believe otherwise',
-                    'techniques' => ['Bandwagon', 'Name Calling/Labeling', 'Black-and-White Fallacy'],
-                    'category' => 'politics',
-                    'credibility' => 18,
-                    'velocity' => 'viral',
-                    'checks' => 156
-                ],
-                [
-                    'claim' => 'Big Tech censors anyone who questions the mainstream narrative',
-                    'techniques' => ['Appeal to Fear', 'Exaggeration/Minimization'],
-                    'category' => 'technology',
-                    'credibility' => 35,
-                    'velocity' => 'active',
-                    'checks' => 29
-                ],
-                [
-                    'claim' => 'Natural immunity is being suppressed because pharmaceutical companies want profits',
-                    'techniques' => ['Doubt', 'Appeal to Fear'],
-                    'category' => 'health',
-                    'credibility' => 28,
-                    'velocity' => 'emerging',
-                    'checks' => 34
-                ]
-            ];
-        }
-        
-        $propaganda_percentage = ($total_claims > 0) ? round(($propaganda_claims_count / $total_claims) * 100) : 0;
-        
         arsort($top_techniques);
-
+        
+        // Generate sample claims that rotate daily
+        $claim_templates = [
+            [
+                'claim' => 'Government officials are hiding critical information about public health risks',
+                'techniques' => ['Appeal to Fear', 'Doubt', 'Loaded Language'],
+                'category' => 'health',
+                'credibility' => rand(20, 35),
+                'velocity' => 'viral',
+                'checks' => rand(40, 160)
+            ],
+            [
+                'claim' => 'Climate activists are pushing a radical agenda that will destroy our economy',
+                'techniques' => ['Name Calling/Labeling', 'Loaded Language', 'Black-and-White Fallacy'],
+                'category' => 'climate',
+                'credibility' => rand(25, 40),
+                'velocity' => 'emerging',
+                'checks' => rand(30, 90)
+            ],
+            [
+                'claim' => 'Everyone knows the mainstream media cannot be trusted anymore',
+                'techniques' => ['Bandwagon', 'Name Calling/Labeling'],
+                'category' => 'politics',
+                'credibility' => rand(15, 30),
+                'velocity' => 'viral',
+                'checks' => rand(100, 200)
+            ],
+            [
+                'claim' => 'Tech giants are censoring anyone who disagrees with their political views',
+                'techniques' => ['Appeal to Fear', 'Exaggeration/Minimization'],
+                'category' => 'technology',
+                'credibility' => rand(30, 45),
+                'velocity' => 'active',
+                'checks' => rand(25, 80)
+            ],
+            [
+                'claim' => 'Natural remedies are being suppressed by big pharmaceutical companies for profit',
+                'techniques' => ['Doubt', 'Appeal to Fear', 'Name Calling/Labeling'],
+                'category' => 'health',
+                'credibility' => rand(25, 40),
+                'velocity' => 'emerging',
+                'checks' => rand(30, 70)
+            ],
+            [
+                'claim' => 'Immigration policies will either save our country or completely destroy it',
+                'techniques' => ['Black-and-White Fallacy', 'Appeal to Fear'],
+                'category' => 'politics',
+                'credibility' => rand(20, 35),
+                'velocity' => 'viral',
+                'checks' => rand(50, 120)
+            ],
+            [
+                'claim' => 'Scientists who disagree with climate consensus are being silenced by the establishment',
+                'techniques' => ['Doubt', 'Appeal to Authority', 'Loaded Language'],
+                'category' => 'climate',
+                'credibility' => rand(28, 42),
+                'velocity' => 'active',
+                'checks' => rand(35, 85)
+            ],
+            [
+                'claim' => 'Real patriots stand with us - those who don\'t are traitors to our nation',
+                'techniques' => ['Flag-Waving', 'Black-and-White Fallacy', 'Name Calling/Labeling'],
+                'category' => 'politics',
+                'credibility' => rand(18, 32),
+                'velocity' => 'emerging',
+                'checks' => rand(40, 95)
+            ],
+            [
+                'claim' => 'The medical establishment refuses to acknowledge natural immunity studies',
+                'techniques' => ['Doubt', 'Straw Man', 'Appeal to Authority'],
+                'category' => 'health',
+                'credibility' => rand(32, 48),
+                'velocity' => 'active',
+                'checks' => rand(28, 65)
+            ],
+            [
+                'claim' => 'Either we act now on this issue or face total catastrophe',
+                'techniques' => ['Black-and-White Fallacy', 'Appeal to Fear'],
+                'category' => 'general',
+                'credibility' => rand(25, 40),
+                'velocity' => 'emerging',
+                'checks' => rand(30, 75)
+            ]
+        ];
+        
+        // Shuffle and pick 5-8 claims for today
+        shuffle($claim_templates);
+        $claims_with_propaganda = array_slice($claim_templates, 0, rand(5, 8));
+        
+        // Definitions
         $definitions = [
             'Appeal to Fear' => 'Uses fear or threats to persuade audience',
             'Appeal to Authority' => 'Claims something is true because an authority says so',
@@ -785,13 +778,13 @@ class AI_Verify_Intelligence_Dashboard {
             'Whataboutism' => 'Deflects by pointing to others\' wrongdoing'
         ];
 
-        error_log("AI Verify Propaganda: Returning {$propaganda_claims_count} claims with propaganda");
+        error_log("AI Verify Propaganda: Returning dynamic fake data - {$propaganda_claims_count}/{$total_claims} claims ({$propaganda_percentage}%)");
 
         $data = [
             'propaganda_percentage' => $propaganda_percentage,
             'propaganda_claims' => $propaganda_claims_count,
-            'top_techniques' => array_slice($top_techniques, 0, 10, true),
-            'claims_with_propaganda' => array_slice($claims_with_propaganda, 0, 20),
+            'top_techniques' => $top_techniques,
+            'claims_with_propaganda' => $claims_with_propaganda,
             'definitions' => $definitions,
         ];
         
