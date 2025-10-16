@@ -66,9 +66,7 @@
 /* Hero Header */
 .assistant-hero {
   background: linear-gradient(
-    135deg,
-    var(--accent-primary) 0%,
-    var(--accent-hover) 100%
+    linear-gradient(135deg, #141816 0%, #23332a 100%)
   );
   padding: 48px 40px;
   text-align: center;
@@ -102,6 +100,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
+  color: #e0f5eb !important;
 }
 
 .hero-title svg {
