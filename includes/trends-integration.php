@@ -33,53 +33,67 @@ class AI_Verify_Trends_Integration {
     }
     
     /**
-     * Process completed report and record in trends
+     * Process completed fact-check report
      */
-    public static function process_completed_report($report_id, $report_data) {
-        error_log("AI Verify Trends: Processing report {$report_id}");
-        
-        if (empty($report_data['factcheck_results'])) {
-            error_log("AI Verify Trends: No factcheck results found");
+    public static function process_completed_report($report_id, $report) {
+        if (!$report || $report['status'] !== 'completed') {
             return;
         }
         
-        $factcheck_results = $report_data['factcheck_results'];
-        $overall_score = isset($report_data['overall_score']) ? floatval($report_data['overall_score']) : 50;
+        error_log("AI Verify Trends: Processing report {$report_id}");
         
-        // Metadata for context
-        $metadata = array(
-            'source_url' => isset($report_data['input_value']) ? $report_data['input_value'] : null,
-            'input_type' => isset($report_data['input_type']) ? $report_data['input_type'] : null,
-            'user_location' => self::get_user_location()
-        );
+        // Extract claims from fact-check results
+        $factcheck_results = $report['factcheck_results'];
         
-        // Record each claim
+        if (empty($factcheck_results) || !is_array($factcheck_results)) {
+            error_log("AI Verify Trends: No claims to process");
+            return;
+        }
+        
+        // Extract propaganda from metadata
+        $metadata_array = is_string($report['metadata']) ? json_decode($report['metadata'], true) : $report['metadata'];
+        $propaganda_techniques = [];
+        
+        if (isset($metadata_array['propaganda_techniques']) && is_array($metadata_array['propaganda_techniques'])) {
+            $propaganda_techniques = $metadata_array['propaganda_techniques'];
+            error_log("AI Verify Trends: Found " . count($propaganda_techniques) . " propaganda techniques");
+        }
+        
+        // Record each claim as a trend
         foreach ($factcheck_results as $result) {
             if (empty($result['claim'])) {
                 continue;
             }
             
-            $claim_score = isset($result['confidence']) ? ($result['confidence'] * 100) : $overall_score;
+            // Calculate claim score
+            $claim_score = isset($result['confidence']) 
+                ? ($result['confidence'] * 100) 
+                : floatval($report['overall_score']);
             
-            $trend_id = AI_Verify_Factcheck_Database::record_claim(
+            // Build metadata with propaganda
+            $claim_metadata = array(
+                'source_url' => $report['input_value'],
+                'input_type' => $report['input_type'],
+                'report_id' => $report_id
+            );
+            
+            // Add propaganda to metadata
+            if (!empty($propaganda_techniques)) {
+                $claim_metadata['propaganda_techniques'] = $propaganda_techniques;
+            }
+            
+            // FIXED: Use the correct class name
+            $trend_id = AI_Verify_Trends_Database::record_claim(
                 $result['claim'],
                 $report_id,
                 $claim_score,
-                $metadata
+                $claim_metadata
             );
             
-            // Queue for enrichment if new
             if ($trend_id) {
-                wp_schedule_single_event(time() + 60, 'ai_verify_enrich_single_trend', array($trend_id));
+                error_log("AI Verify Trends: Recorded claim (trend_id: {$trend_id}) with propaganda");
             }
         }
-        
-        // Also update propaganda data if present
-        if (!empty($report_data['metadata']['propaganda_techniques'])) {
-            self::update_propaganda_data($report_id, $report_data['metadata']['propaganda_techniques']);
-        }
-        
-        error_log("AI Verify Trends: Recorded " . count($factcheck_results) . " claims");
     }
     
     /**
