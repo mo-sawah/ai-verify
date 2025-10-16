@@ -44,6 +44,9 @@
       // Load chart data (with retry logic for DashboardCharts)
       this.loadChartData();
 
+      // Load propaganda data
+      this.loadPropagandaData();
+
       // Start auto-refresh (every 60 seconds)
       this.startAutoRefresh();
 
@@ -623,6 +626,172 @@
       const div = document.createElement("div");
       div.textContent = text;
       return div.innerHTML;
+    },
+
+    /**
+     * Load propaganda data
+     */
+    loadPropagandaData: function () {
+      const self = this;
+
+      $.ajax({
+        url: aiVerifyDashboard.ajax_url,
+        type: "POST",
+        data: {
+          action: "ai_verify_get_propaganda_data",
+          nonce: aiVerifyDashboard.nonce,
+          timeframe: self.filters.timeframe,
+          category: self.filters.category,
+        },
+        success: function (response) {
+          if (response.success) {
+            self.renderPropagandaData(response.data);
+          }
+        },
+        error: function () {
+          console.error("Failed to load propaganda data");
+        },
+      });
+    },
+
+    /**
+     * Render propaganda data
+     */
+    renderPropagandaData: function (data) {
+      // Update stats
+      $("#propagandaPercentage").text(data.propaganda_percentage + "%");
+      $("#totalPropagandaClaims").text(data.propaganda_claims);
+      $("#uniqueTechniques").text(Object.keys(data.top_techniques).length);
+
+      const topTechniqueName = Object.keys(data.top_techniques)[0] || "None";
+      $("#mostCommonTechnique").text(topTechniqueName);
+
+      // Render techniques list
+      const $techniquesList = $("#propagandaTechniquesList");
+      $techniquesList.empty();
+
+      if (Object.keys(data.top_techniques).length === 0) {
+        $techniquesList.html(
+          '<p class="no-data">No propaganda techniques detected in selected timeframe</p>'
+        );
+        return;
+      }
+
+      let techniquesHtml = '<div class="techniques-grid">';
+
+      for (const [technique, count] of Object.entries(data.top_techniques)) {
+        const percentage = ((count / data.propaganda_claims) * 100).toFixed(1);
+        const definition =
+          data.definitions[technique] || "No definition available";
+
+        techniquesHtml += `
+                <div class="technique-card">
+                    <div class="technique-header">
+                        <h4 class="technique-name">${this.escapeHtml(
+                          technique
+                        )}</h4>
+                        <span class="technique-count">${count}</span>
+                    </div>
+                    <div class="technique-bar">
+                        <div class="technique-bar-fill" style="width: ${percentage}%"></div>
+                    </div>
+                    <p class="technique-definition">${this.escapeHtml(
+                      definition
+                    )}</p>
+                    <div class="technique-meta">
+                        <span class="technique-percentage">${percentage}% of propaganda claims</span>
+                    </div>
+                </div>
+            `;
+      }
+
+      techniquesHtml += "</div>";
+      $techniquesList.html(techniquesHtml);
+
+      // Render claims with propaganda
+      this.renderPropagandaClaims(data.claims_with_propaganda);
+    },
+
+    /**
+     * Render propaganda claims
+     */
+    renderPropagandaClaims: function (claims) {
+      const $claimsList = $("#propagandaClaimsList");
+      $claimsList.empty();
+
+      if (claims.length === 0) {
+        return;
+      }
+
+      let html =
+        '<h3 class="subsection-title">Recent Claims with Propaganda</h3>';
+      html += '<div class="propaganda-claims-grid">';
+
+      claims.forEach((claim) => {
+        const severityColors = {
+          critical: "#ef4444",
+          high: "#f59e0b",
+          moderate: "#eab308",
+          low: "#10b981",
+        };
+
+        const techniqueCount = claim.techniques.length;
+        const severity =
+          techniqueCount >= 5
+            ? "critical"
+            : techniqueCount >= 3
+            ? "high"
+            : techniqueCount >= 1
+            ? "moderate"
+            : "low";
+        const severityColor = severityColors[severity];
+
+        html += `
+            <div class="propaganda-claim-card">
+                <div class="propaganda-claim-header">
+                    <span class="propaganda-badge" style="background: ${severityColor}15; color: ${severityColor}; border-color: ${severityColor}">
+                        ${techniqueCount} Technique${
+          techniqueCount !== 1 ? "s" : ""
+        }
+                    </span>
+                    <span class="claim-category-badge">${this.escapeHtml(
+                      claim.category
+                    )}</span>
+                </div>
+                <div class="propaganda-claim-text">${this.escapeHtml(
+                  claim.claim
+                )}</div>
+                <div class="propaganda-techniques-tags">
+                    ${claim.techniques
+                      .map(
+                        (t) =>
+                          `<span class="technique-tag">${this.escapeHtml(
+                            t
+                          )}</span>`
+                      )
+                      .join("")}
+                </div>
+                <div class="propaganda-claim-meta">
+                    <span class="credibility-score" style="color: ${
+                      claim.credibility >= 70
+                        ? "#10b981"
+                        : claim.credibility >= 40
+                        ? "#eab308"
+                        : "#ef4444"
+                    }">
+                        Score: ${claim.credibility}/100
+                    </span>
+                    <span class="velocity-status">${this.capitalizeFirst(
+                      claim.velocity
+                    )}</span>
+                    <span class="check-count">${claim.checks} checks</span>
+                </div>
+            </div>
+        `;
+      });
+
+      html += "</div>";
+      $claimsList.html(html);
     },
   };
 

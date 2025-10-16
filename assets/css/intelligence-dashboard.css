@@ -1256,3 +1256,262 @@ input,
     font-size: 11px !important;
   }
 }
+
+/* ========================================
+   PROPAGANDA ANALYSIS SECTION
+   ======================================== */
+
+.propaganda-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+.propaganda-stat {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.propaganda-stat strong {
+  color: var(--accent-viral);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.propaganda-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.propaganda-stat-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.propaganda-stat-card .stat-icon {
+  font-size: 32px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.propaganda-stat-card .stat-icon.critical {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.propaganda-stat-card .stat-icon.high {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.propaganda-stat-card .stat-icon.moderate {
+  background: rgba(234, 179, 8, 0.1);
+}
+
+.propaganda-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* Techniques List */
+.techniques-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.technique-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.technique-card:hover {
+  border-color: var(--accent-viral);
+  transform: translateX(4px);
+  box-shadow: var(--shadow-md);
+}
+
+.technique-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.technique-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.technique-count {
+  background: var(--accent-viral);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.technique-bar {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.technique-bar-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--accent-viral) 0%,
+    var(--accent-emerging) 100%
+  );
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.technique-definition {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  line-height: 1.5;
+}
+
+.technique-meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.technique-percentage {
+  font-weight: 600;
+}
+
+/* Propaganda Claims List */
+.propaganda-claims-list {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.subsection-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+}
+
+.propaganda-claims-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.propaganda-claim-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.propaganda-claim-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.propaganda-claim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.propaganda-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid;
+}
+
+.claim-category-badge {
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.propaganda-claim-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.propaganda-techniques-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.technique-tag {
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-viral);
+}
+
+.propaganda-claim-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.credibility-score,
+.velocity-status,
+.check-count {
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .propaganda-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .propaganda-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
