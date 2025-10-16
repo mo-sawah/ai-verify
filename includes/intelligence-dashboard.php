@@ -36,6 +36,10 @@ class AI_Verify_Intelligence_Dashboard {
         add_action('wp_ajax_ai_verify_dashboard_stats', array(__CLASS__, 'ajax_get_stats'));
         add_action('wp_ajax_nopriv_ai_verify_dashboard_refresh', array(__CLASS__, 'ajax_refresh_dashboard'));
 
+        // Add this in the init() method, around line 35
+        add_action('wp_ajax_ai_verify_get_propaganda_data', array(__CLASS__, 'ajax_get_propaganda_data'));
+        add_action('wp_ajax_nopriv_ai_verify_get_propaganda_data', array(__CLASS__, 'ajax_get_propaganda_data'));
+
         
         // Schedule velocity calculations (every 15 minutes)
         add_action('ai_verify_calculate_velocity', array(__CLASS__, 'scheduled_velocity_calculation'));
@@ -603,6 +607,79 @@ class AI_Verify_Intelligence_Dashboard {
             'top_sources_count' => count($top_sources),
             'credibility_count' => count($credibility)
         )));
+        
+        wp_send_json_success($data);
+    }
+
+    /**
+     * AJAX: Get propaganda analysis data
+     */
+    public static function ajax_get_propaganda_data() {
+        check_ajax_referer('ai_verify_dashboard_nonce', 'nonce');
+
+        global $wpdb;
+        $table_trends = $wpdb->prefix . 'ai_verify_claim_trends';
+        
+        $timeframe_days = 7; // Default to 7 days
+        
+        // Get total claims in timeframe
+        $total_claims = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table_trends WHERE last_seen >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+            $timeframe_days
+        ));
+
+        // Get claims with propaganda
+        $propaganda_claims_results = $wpdb->get_results($wpdb->prepare(
+            "SELECT claim_text, propaganda_techniques, category, avg_credibility_score, velocity_status, check_count 
+            FROM $table_trends 
+            WHERE propaganda_techniques IS NOT NULL AND propaganda_techniques != '[]' AND propaganda_techniques != ''
+            AND last_seen >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+            $timeframe_days
+        ));
+
+        $propaganda_claims_count = count($propaganda_claims_results);
+        $propaganda_percentage = ($total_claims > 0) ? round(($propaganda_claims_count / $total_claims) * 100) : 0;
+        
+        $top_techniques = [];
+        $claims_with_propaganda = [];
+
+        foreach ($propaganda_claims_results as $claim) {
+            $techniques = json_decode($claim->propaganda_techniques, true);
+            if (is_array($techniques) && !empty($techniques)) {
+                $claims_with_propaganda[] = [
+                    'claim' => $claim->claim_text,
+                    'techniques' => $techniques,
+                    'category' => $claim->category,
+                    'credibility' => round($claim->avg_credibility_score),
+                    'velocity' => $claim->velocity_status,
+                    'checks' => $claim->check_count
+                ];
+                foreach ($techniques as $technique) {
+                    if (!isset($top_techniques[$technique])) {
+                        $top_techniques[$technique] = 0;
+                    }
+                    $top_techniques[$technique]++;
+                }
+            }
+        }
+        
+        arsort($top_techniques);
+
+        // For this example, we'll add placeholder definitions.
+        $definitions = [
+            'Appeal to Fear' => 'Exploiting people\'s fears to manipulate them.',
+            'Bandwagon' => 'Creating the impression that everyone is doing it, so you should too.',
+            'Name-Calling' => 'Using negative labels to discredit someone or something.',
+            'Glittering Generalities' => 'Using vague, emotionally appealing words without concrete evidence.'
+        ];
+
+        $data = [
+            'propaganda_percentage' => $propaganda_percentage,
+            'propaganda_claims' => $propaganda_claims_count,
+            'top_techniques' => array_slice($top_techniques, 0, 5, true), // Return top 5
+            'claims_with_propaganda' => array_slice($claims_with_propaganda, 0, 5), // Return 5 sample claims
+            'definitions' => $definitions,
+        ];
         
         wp_send_json_success($data);
     }
