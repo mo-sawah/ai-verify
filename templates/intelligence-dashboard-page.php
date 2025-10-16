@@ -237,61 +237,118 @@ Analytics Dashboard
     </div>
 </div>
 
-<!-- Propaganda Analysis Section -->
-    <div class="propaganda-section">
-        <div class="section-header">
-            <h2 class="section-title">
-                <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/>
-                </svg>
-                Propaganda Techniques Analysis
-            </h2>
-            <div class="section-meta">
-                <span class="propaganda-stat">
-                    <strong id="propagandaPercentage">0%</strong> of claims contain propaganda
-                </span>
+<div class="propaganda-section">
+    <div class="section-header">
+        <h2 class="section-title">
+            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" />
+            </svg>
+            Propaganda Techniques Analysis
+        </h2>
+        <div class="section-meta">
+            <span class="propaganda-stat">
+                <strong id="propagandaPercentage">65%</strong> of claims contain propaganda
+            </span>
+        </div>
+    </div>
+
+    <div class="propaganda-stats-grid">
+        <div class="propaganda-stat-card">
+            <div class="stat-icon critical">⚠️</div>
+            <div class="stat-content">
+                <div class="stat-value" id="totalPropagandaClaims">13</div>
+                <div class="stat-label">Claims with Propaganda</div>
             </div>
         </div>
-        
-        <div class="propaganda-stats-grid">
-            <div class="propaganda-stat-card">
-                <div class="stat-icon critical">⚠️</div>
-                <div class="stat-content">
-                    <div class="stat-value" id="totalPropagandaClaims">0</div>
-                    <div class="stat-label">Claims with Propaganda</div>
-                </div>
-            </div>
-            
-            <div class="propaganda-stat-card">
-                <div class="stat-icon high">🎯</div>
-                <div class="stat-content">
-                    <div class="stat-value" id="uniqueTechniques">0</div>
-                    <div class="stat-label">Unique Techniques</div>
-                </div>
-            </div>
-            
-            <div class="propaganda-stat-card">
-                <div class="stat-icon moderate">📊</div>
-                <div class="stat-content">
-                    <div class="stat-value" id="mostCommonTechnique">Loading...</div>
-                    <div class="stat-label">Most Common</div>
-                </div>
+
+        <div class="propaganda-stat-card">
+            <div class="stat-icon high">🎯</div>
+            <div class="stat-content">
+                <div class="stat-value" id="uniqueTechniques">5</div>
+                <div class="stat-label">Unique Techniques</div>
             </div>
         </div>
-        
-        <div class="propaganda-content">
-            <div class="propaganda-techniques-list" id="propagandaTechniquesList">
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p class="loading-text">Loading propaganda analysis...</p>
-                </div>
-            </div>
-            
-            <div class="propaganda-claims-list" id="propagandaClaimsList">
-                <!-- Claims with propaganda will be loaded here -->
+
+        <div class="propaganda-stat-card">
+            <div class="stat-icon moderate">📊</div>
+            <div class="stat-content">
+                <div class="stat-value" id="mostCommonTechnique">Ad Hominem</div>
+                <div class="stat-label">Most Common</div>
             </div>
         </div>
     </div>
+
+    <div class="propaganda-content">
+        <div class="propaganda-techniques-list" id="propagandaTechniquesList">
+            <div class="technique-item">
+                <div class="technique-info">
+                    <span class="technique-name">Ad Hominem</span>
+                    <span class="technique-count">5</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 38%;"></div>
+                </div>
+            </div>
+            <div class="technique-item">
+                <div class="technique-info">
+                    <span class="technique-name">Appeal to Emotion</span>
+                    <span class="technique-count">3</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 23%;"></div>
+                </div>
+            </div>
+            <div class="technique-item">
+                <div class="technique-info">
+                    <span class="technique-name">Strawman</span>
+                    <span class="technique-count">3</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 23%;"></div>
+                </div>
+            </div>
+            <div class="technique-item">
+                <div class="technique-info">
+                    <span class="technique-name">Loaded Language</span>
+                    <span class="technique-count">1</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 8%;"></div>
+                </div>
+            </div>
+            <div class="technique-item">
+                <div class="technique-info">
+                    <span class="technique-name">Bandwagon</span>
+                    <span class="technique-count">1</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 8%;"></div>
+                </div>
+            </div>
+            </div>
+
+        <div class="propaganda-claims-list" id="propagandaClaimsList">
+            <div class="claim-card">
+                <div class="claim-header">
+                    <span class="technique-tag ad-hominem">Ad Hominem</span>
+                </div>
+                <p class="claim-text">"We can't trust the senator's new policy because he's a known flip-flopper with questionable friends."</p>
+            </div>
+            <div class="claim-card">
+                <div class="claim-header">
+                    <span class="technique-tag appeal-to-emotion">Appeal to Emotion</span>
+                </div>
+                <p class="claim-text">"Think of the innocent children who will suffer if we don't pass this law immediately."</p>
+            </div>
+             <div class="claim-card">
+                <div class="claim-header">
+                    <span class="technique-tag strawman">Strawman</span>
+                </div>
+                <p class="claim-text">"The opposition wants to leave our borders wide open for anyone to just walk in, which is a ridiculous security risk."</p>
+            </div>
+            </div>
+    </div>
+</div>
 
 <!-- Claims Grid -->
 <div class="claims-section">
