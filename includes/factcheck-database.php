@@ -162,30 +162,47 @@ class AI_Verify_Factcheck_Database {
         );
     }
     
-    public static function save_results($report_id, $factcheck_results, $overall_score, $credibility_rating, $sources, $propaganda = array()) {
-    global $wpdb;
-    
-    $table = $wpdb->prefix . 'ai_verify_factcheck_reports';
-    
-    $result = $wpdb->update(
-        $table,
-        array(
-            'factcheck_results' => json_encode($factcheck_results),
-            'overall_score' => $overall_score,
-            'credibility_rating' => $credibility_rating,
-            'sources' => json_encode($sources),
-            'metadata' => json_encode(array('propaganda_techniques' => $propaganda)),
+    /**
+     * Save fact-check results
+     */
+    public static function save_results($report_id, $results, $overall_score, $rating, $sources = array(), $propaganda = array()) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'ai_verify_factcheck_reports';
+        
+        // Prepare metadata with propaganda
+        $metadata = array();
+        if (!empty($propaganda)) {
+            $metadata['propaganda_techniques'] = $propaganda;
+        }
+        
+        $update_data = array(
             'status' => 'completed',
+            'factcheck_results' => json_encode($results),
+            'overall_score' => $overall_score,
+            'credibility_rating' => $rating,
+            'sources' => json_encode($sources),
+            'metadata' => json_encode($metadata),
             'completed_at' => current_time('mysql')
-        ),
-        array('report_id' => $report_id),
-        array('%s', '%f', '%s', '%s', '%s', '%s', '%s'),
-        array('%s')
-    );
-    
-    // Return true if update succeeded
-    return $result !== false;
-}
+        );
+        
+        $updated = $wpdb->update(
+            $table_name,
+            $update_data,
+            array('report_id' => $report_id),
+            array('%s', '%s', '%f', '%s', '%s', '%s', '%s'),
+            array('%s')
+        );
+        
+        if ($updated === false) {
+            error_log('AI Verify: Failed to save results: ' . $wpdb->last_error);
+            return false;
+        }
+        
+        error_log("AI Verify: Saved results for report {$report_id} with " . count($propaganda) . " propaganda techniques");
+        
+        return true;
+    }
     
     /**
      * Get report by ID (updated to include metadata)
