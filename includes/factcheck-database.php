@@ -163,17 +163,20 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * Save fact-check results
+     * Save fact-check results (UPDATED - NOW SAVES PROPAGANDA)
      */
     public static function save_results($report_id, $results, $overall_score, $rating, $sources = array(), $propaganda = array()) {
         global $wpdb;
         
         $table_name = $wpdb->prefix . 'ai_verify_factcheck_reports';
         
-        // Prepare metadata with propaganda
+        // Build metadata with propaganda
         $metadata = array();
-        if (!empty($propaganda)) {
+        if (!empty($propaganda) && is_array($propaganda)) {
             $metadata['propaganda_techniques'] = $propaganda;
+            error_log("AI Verify: Saving " . count($propaganda) . " propaganda techniques: " . json_encode($propaganda));
+        } else {
+            error_log("AI Verify: No propaganda techniques to save");
         }
         
         $update_data = array(
@@ -186,20 +189,22 @@ class AI_Verify_Factcheck_Database {
             'completed_at' => current_time('mysql')
         );
         
+        $format = array('%s', '%s', '%f', '%s', '%s', '%s', '%s');
+        
         $updated = $wpdb->update(
             $table_name,
             $update_data,
             array('report_id' => $report_id),
-            array('%s', '%s', '%f', '%s', '%s', '%s', '%s'),
+            $format,
             array('%s')
         );
         
         if ($updated === false) {
-            error_log('AI Verify: Failed to save results: ' . $wpdb->last_error);
+            error_log('AI Verify: Database update failed: ' . $wpdb->last_error);
             return false;
         }
         
-        error_log("AI Verify: Saved results for report {$report_id} with " . count($propaganda) . " propaganda techniques");
+        error_log("AI Verify: Successfully saved results for {$report_id}");
         
         return true;
     }
