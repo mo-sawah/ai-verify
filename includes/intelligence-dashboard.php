@@ -632,154 +632,62 @@ class AI_Verify_Intelligence_Dashboard {
         wp_send_json_success($data);
     }
 
-    /**
-     * AJAX: Get propaganda analysis data (DYNAMIC FAKE DATA)
+   /**
+     * AJAX: Get propaganda analysis data (STATIC FAKE DATA for development)
      */
     public static function ajax_get_propaganda_data() {
         check_ajax_referer('ai_verify_dashboard_nonce', 'nonce');
 
-        // Use current date as seed for consistency within the same day
-        $seed = intval(date('Ymd'));
-        srand($seed);
-        
-        // Generate varying daily stats
-        $total_claims = rand(80, 150);
-        $propaganda_claims_count = rand(15, 45);
-        $propaganda_percentage = round(($propaganda_claims_count / $total_claims) * 100);
-        
-        // Rotate top techniques daily
-        $all_techniques = [
-            'Appeal to Fear',
-            'Loaded Language',
-            'Name Calling/Labeling',
-            'Black-and-White Fallacy',
-            'Bandwagon',
-            'Exaggeration/Minimization',
-            'Doubt',
-            'Appeal to Authority',
-            'Straw Man',
-            'Whataboutism',
-            'Red Herring',
-            'Flag-Waving'
+        // --- Hardcoded Static Data ---
+
+        // 1. Define the main stats
+        $propaganda_percentage = 65;
+        $propaganda_claims_count = 13;
+
+        // 2. Define the top techniques and their counts (must be sorted high to low)
+        $top_techniques = [
+            'Ad Hominem' => 5,
+            'Appeal to Emotion' => 3,
+            'Strawman' => 3,
+            'Loaded Language' => 1,
+            'Bandwagon' => 1
         ];
-        
-        shuffle($all_techniques);
-        $top_techniques = [];
-        for ($i = 0; $i < 7; $i++) {
-            $top_techniques[$all_techniques[$i]] = rand(2, 12);
-        }
-        arsort($top_techniques);
-        
-        // Generate sample claims that rotate daily
-        $claim_templates = [
+        // Note: The sum of these counts (5+3+3+1+1) is 13, matching $propaganda_claims_count.
+
+        // 3. Define a fixed list of example claims with propaganda
+        $claims_with_propaganda = [
             [
-                'claim' => 'Government officials are hiding critical information about public health risks',
-                'techniques' => ['Appeal to Fear', 'Doubt', 'Loaded Language'],
-                'category' => 'health',
-                'credibility' => rand(20, 35),
-                'velocity' => 'viral',
-                'checks' => rand(40, 160)
+                'claim' => "We can't trust the senator's new policy because he's a known flip-flopper with questionable friends.",
+                'techniques' => ['Ad Hominem'], // Keep it simple with one technique for display
             ],
             [
-                'claim' => 'Climate activists are pushing a radical agenda that will destroy our economy',
-                'techniques' => ['Name Calling/Labeling', 'Loaded Language', 'Black-and-White Fallacy'],
-                'category' => 'climate',
-                'credibility' => rand(25, 40),
-                'velocity' => 'emerging',
-                'checks' => rand(30, 90)
+                'claim' => "Think of the innocent children who will suffer if we don't pass this law immediately.",
+                'techniques' => ['Appeal to Emotion'],
             ],
             [
-                'claim' => 'Everyone knows the mainstream media cannot be trusted anymore',
-                'techniques' => ['Bandwagon', 'Name Calling/Labeling'],
-                'category' => 'politics',
-                'credibility' => rand(15, 30),
-                'velocity' => 'viral',
-                'checks' => rand(100, 200)
-            ],
-            [
-                'claim' => 'Tech giants are censoring anyone who disagrees with their political views',
-                'techniques' => ['Appeal to Fear', 'Exaggeration/Minimization'],
-                'category' => 'technology',
-                'credibility' => rand(30, 45),
-                'velocity' => 'active',
-                'checks' => rand(25, 80)
-            ],
-            [
-                'claim' => 'Natural remedies are being suppressed by big pharmaceutical companies for profit',
-                'techniques' => ['Doubt', 'Appeal to Fear', 'Name Calling/Labeling'],
-                'category' => 'health',
-                'credibility' => rand(25, 40),
-                'velocity' => 'emerging',
-                'checks' => rand(30, 70)
-            ],
-            [
-                'claim' => 'Immigration policies will either save our country or completely destroy it',
-                'techniques' => ['Black-and-White Fallacy', 'Appeal to Fear'],
-                'category' => 'politics',
-                'credibility' => rand(20, 35),
-                'velocity' => 'viral',
-                'checks' => rand(50, 120)
-            ],
-            [
-                'claim' => 'Scientists who disagree with climate consensus are being silenced by the establishment',
-                'techniques' => ['Doubt', 'Appeal to Authority', 'Loaded Language'],
-                'category' => 'climate',
-                'credibility' => rand(28, 42),
-                'velocity' => 'active',
-                'checks' => rand(35, 85)
-            ],
-            [
-                'claim' => 'Real patriots stand with us - those who don\'t are traitors to our nation',
-                'techniques' => ['Flag-Waving', 'Black-and-White Fallacy', 'Name Calling/Labeling'],
-                'category' => 'politics',
-                'credibility' => rand(18, 32),
-                'velocity' => 'emerging',
-                'checks' => rand(40, 95)
-            ],
-            [
-                'claim' => 'The medical establishment refuses to acknowledge natural immunity studies',
-                'techniques' => ['Doubt', 'Straw Man', 'Appeal to Authority'],
-                'category' => 'health',
-                'credibility' => rand(32, 48),
-                'velocity' => 'active',
-                'checks' => rand(28, 65)
-            ],
-            [
-                'claim' => 'Either we act now on this issue or face total catastrophe',
-                'techniques' => ['Black-and-White Fallacy', 'Appeal to Fear'],
-                'category' => 'general',
-                'credibility' => rand(25, 40),
-                'velocity' => 'emerging',
-                'checks' => rand(30, 75)
+                'claim' => "The opposition wants to leave our borders wide open for anyone to just walk in, which is a ridiculous security risk.",
+                'techniques' => ['Strawman'],
             ]
         ];
         
-        // Shuffle and pick 5-8 claims for today
-        shuffle($claim_templates);
-        $claims_with_propaganda = array_slice($claim_templates, 0, rand(5, 8));
-        
-        // Definitions
+        // 4. Definitions can remain as they are static already
         $definitions = [
+            'Ad Hominem' => 'Attacks the person making the argument, instead of the argument itself.',
+            'Appeal to Emotion' => 'Manipulates an emotional response in place of a valid or compelling argument.',
+            'Strawman' => 'Misrepresents someone\'s argument to make it easier to attack.',
+            'Loaded Language' => 'Uses words with strong positive or negative connotations to influence the audience.',
+            'Bandwagon' => 'Appeals to popularity or the fact that many people do something as an attempted form of validation.',
             'Appeal to Fear' => 'Uses fear or threats to persuade audience',
             'Appeal to Authority' => 'Claims something is true because an authority says so',
-            'Bandwagon' => 'Appeals to desire to follow the crowd',
             'Black-and-White Fallacy' => 'Presents only two options when more exist',
-            'Causal Oversimplification' => 'Assumes single cause for complex issue',
             'Doubt' => 'Questions credibility without evidence',
-            'Exaggeration/Minimization' => 'Makes things bigger or smaller than reality',
             'Flag-Waving' => 'Appeals to patriotism or group identity',
-            'Loaded Language' => 'Uses emotionally charged words',
             'Name Calling/Labeling' => 'Gives negative labels to discredit',
-            'Obfuscation' => 'Uses confusing or vague language',
             'Red Herring' => 'Introduces irrelevant information',
-            'Repetition' => 'Repeats message to make it seem true',
-            'Slogans' => 'Uses catchy phrases instead of reasoning',
-            'Straw Man' => 'Misrepresents opponent\'s argument',
             'Whataboutism' => 'Deflects by pointing to others\' wrongdoing'
         ];
 
-        error_log("AI Verify Propaganda: Returning dynamic fake data - {$propaganda_claims_count}/{$total_claims} claims ({$propaganda_percentage}%)");
-
+        // --- Prepare the final data payload ---
         $data = [
             'propaganda_percentage' => $propaganda_percentage,
             'propaganda_claims' => $propaganda_claims_count,
