@@ -476,12 +476,11 @@ class AI_Verify_Intelligence_Dashboard {
     }
 
     /**
-     * AJAX: Get chart data (WITH DETAILED LOGGING)
+     * AJAX: Get chart data (WITH NEW CHARTS)
      */
     public static function ajax_get_chart_data() {
         error_log('AI Verify: ajax_get_chart_data called');
         
-        // Check nonce
         $nonce_check = check_ajax_referer('ai_verify_dashboard_nonce', 'nonce', false);
         error_log('AI Verify: Nonce check: ' . ($nonce_check ? 'PASSED' : 'FAILED'));
         
@@ -499,9 +498,7 @@ class AI_Verify_Intelligence_Dashboard {
         $table_instances = $wpdb->prefix . 'ai_verify_claim_instances';
         $table_sources = $wpdb->prefix . 'ai_verify_claim_sources';
         
-        error_log('AI Verify: Tables - Trends: ' . $table_trends . ', Instances: ' . $table_instances);
-        
-        // Get timeline data (last 7 days)
+        // Get timeline data
         $timeline = $wpdb->get_results("
             SELECT 
                 DATE(checked_at) as date,
@@ -513,9 +510,6 @@ class AI_Verify_Intelligence_Dashboard {
         ", ARRAY_A);
         
         error_log('AI Verify: Timeline query returned ' . count($timeline) . ' rows');
-        if ($wpdb->last_error) {
-            error_log('AI Verify: Timeline SQL error: ' . $wpdb->last_error);
-        }
         
         // Get category breakdown
         $categories = $wpdb->get_results("
@@ -556,18 +550,58 @@ class AI_Verify_Intelligence_Dashboard {
         
         error_log('AI Verify: Platforms query returned ' . count($platforms) . ' rows');
         
+        // *** NEW: Get top sources ***
+        $top_sources = $wpdb->get_results("
+            SELECT 
+                author_handle as source,
+                COUNT(*) as count
+            FROM $table_sources
+            WHERE scraped_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            AND author_handle IS NOT NULL
+            AND author_handle != ''
+            GROUP BY author_handle
+            ORDER BY count DESC
+            LIMIT 10
+        ", ARRAY_A);
+        
+        error_log('AI Verify: Top sources query returned ' . count($top_sources) . ' rows');
+        
+        // *** NEW: Get credibility distribution ***
+        $credibility = $wpdb->get_results("
+            SELECT 
+                CASE 
+                    WHEN avg_credibility_score >= 80 THEN 'Highly Credible (80-100)'
+                    WHEN avg_credibility_score >= 60 THEN 'Mostly Credible (60-79)'
+                    WHEN avg_credibility_score >= 40 THEN 'Mixed (40-59)'
+                    WHEN avg_credibility_score >= 20 THEN 'Low Credibility (20-39)'
+                    ELSE 'Not Credible (0-19)'
+                END as credibility_range,
+                COUNT(*) as count
+            FROM $table_trends
+            WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            AND avg_credibility_score IS NOT NULL
+            GROUP BY credibility_range
+            ORDER BY MIN(avg_credibility_score) DESC
+        ", ARRAY_A);
+        
+        error_log('AI Verify: Credibility query returned ' . count($credibility) . ' rows');
+        
         $data = array(
             'timeline' => $timeline,
             'categories' => $categories,
             'velocity' => $velocity,
-            'platforms' => $platforms
+            'platforms' => $platforms,
+            'top_sources' => $top_sources,      // NEW
+            'credibility' => $credibility        // NEW
         );
         
         error_log('AI Verify: Sending chart data - ' . json_encode(array(
             'timeline_count' => count($timeline),
             'categories_count' => count($categories),
             'velocity_count' => count($velocity),
-            'platforms_count' => count($platforms)
+            'platforms_count' => count($platforms),
+            'top_sources_count' => count($top_sources),
+            'credibility_count' => count($credibility)
         )));
         
         wp_send_json_success($data);

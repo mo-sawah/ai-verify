@@ -44,6 +44,8 @@
       this.initCategoryChart(data.categories || []);
       this.initVelocityChart(data.velocity || []);
       this.initPlatformChart(data.platforms || []);
+      this.initTopSourcesChart(data.top_sources || []); // NEW
+      this.initCredibilityChart(data.credibility || []); // NEW
     },
 
     initTimelineChart: function (timelineData) {
@@ -212,6 +214,144 @@
               grid: { color: this.theme.gridColor },
             },
             x: { grid: { display: false } },
+          },
+        },
+      });
+    },
+    // *** NEW METHOD 1: Top Sources Chart ***
+    initTopSourcesChart: function (sourcesData) {
+      const ctx = document.getElementById("topSourcesChart");
+      if (!ctx) return;
+
+      const labels = sourcesData.map((item) => {
+        const source = item.source || "Unknown";
+        return source.length > 20 ? source.substring(0, 20) + "..." : source;
+      });
+      const counts = sourcesData.map((item) => parseInt(item.count));
+
+      this.charts.topSources = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels.length ? labels : ["No data"],
+          datasets: [
+            {
+              label: "Claims",
+              data: counts.length ? counts : [0],
+              backgroundColor: [
+                "#ef4444",
+                "#f59e0b",
+                "#f59e0b",
+                "#3b82f6",
+                "#3b82f6",
+                "#8b5cf6",
+                "#8b5cf6",
+                "#6b7280",
+                "#6b7280",
+                "#6b7280",
+              ],
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: "y",
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: function (context) {
+                  return sourcesData[context[0].dataIndex]?.source || "Unknown";
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: this.theme.gridColor },
+            },
+            y: {
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    },
+
+    // *** NEW METHOD 2: Credibility Distribution Chart ***
+    initCredibilityChart: function (credibilityData) {
+      const ctx = document.getElementById("credibilityChart");
+      if (!ctx) return;
+
+      // Sort data by credibility (highest to lowest)
+      const sortedData = credibilityData.sort((a, b) => {
+        const orderMap = {
+          "Highly Credible (80-100)": 5,
+          "Mostly Credible (60-79)": 4,
+          "Mixed (40-59)": 3,
+          "Low Credibility (20-39)": 2,
+          "Not Credible (0-19)": 1,
+        };
+        return (
+          (orderMap[b.credibility_range] || 0) -
+          (orderMap[a.credibility_range] || 0)
+        );
+      });
+
+      const labels = sortedData.map((item) => item.credibility_range);
+      const counts = sortedData.map((item) => parseInt(item.count));
+
+      // Color based on credibility level
+      const colors = sortedData.map((item) => {
+        const range = item.credibility_range;
+        if (range.includes("Highly")) return "#10b981";
+        if (range.includes("Mostly")) return "#3b82f6";
+        if (range.includes("Mixed")) return "#f59e0b";
+        if (range.includes("Low")) return "#fb923c";
+        return "#ef4444";
+      });
+
+      this.charts.credibility = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels.length ? labels : ["No data"],
+          datasets: [
+            {
+              label: "Claims",
+              data: counts.length ? counts : [0],
+              backgroundColor: colors.length ? colors : ["#6b7280"],
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  return context.parsed.y + " claims";
+                },
+              },
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: this.theme.gridColor },
+            },
+            x: {
+              grid: { display: false },
+              ticks: {
+                callback: function (value, index) {
+                  const label = this.getLabelForValue(value);
+                  // Shorten x-axis labels
+                  return label.replace(/\s*\(\d+-\d+\)/, "");
+                },
+              },
+            },
           },
         },
       });

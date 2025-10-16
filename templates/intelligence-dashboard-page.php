@@ -204,17 +204,35 @@ Analytics Dashboard
 </button>
 </div>    <div id="analyticsContent" class="charts-grid">
         <div class="chart-container">
-            <h3 class="chart-title">Claims Timeline</h3>
+            <div class="chart-title">Claims Timeline</div>
             <canvas id="timelineChart"></canvas>
-        </div>        <div class="chart-container">
-            <h3 class="chart-title">Category Breakdown</h3>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">Category Breakdown</div>
             <canvas id="categoryChart"></canvas>
-        </div>        <div class="chart-container">
-            <h3 class="chart-title">Viral Velocity</h3>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">Viral Velocity</div>
             <canvas id="velocityChart"></canvas>
-        </div>        <div class="chart-container">
-            <h3 class="chart-title">Platform Distribution</h3>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">Platform Distribution</div>
             <canvas id="platformChart"></canvas>
+        </div>
+        
+        <!-- NEW CHART 1: Top Sources -->
+        <div class="chart-container">
+            <div class="chart-title">🌐 Top Misinformation Sources</div>
+            <canvas id="topSourcesChart"></canvas>
+        </div>
+        
+        <!-- NEW CHART 2: Credibility Distribution -->
+        <div class="chart-container">
+            <div class="chart-title">📊 Credibility Score Distribution</div>
+            <canvas id="credibilityChart"></canvas>
         </div>
     </div>
 </div><!-- Claims Grid -->
