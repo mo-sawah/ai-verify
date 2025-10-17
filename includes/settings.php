@@ -47,6 +47,7 @@ class AI_Verify_Settings {
         register_setting('ai_verify_settings', 'ai_verify_scraping_service');
         register_setting('ai_verify_settings', 'ai_verify_tavily_key'); // NEW
         register_setting('ai_verify_settings', 'ai_verify_twitter_api_key'); // Twitter API Key
+        register_setting('ai_verify_settings', 'ai_verify_reality_defender_key');
     }
     
     public static function render_settings_page() {
@@ -78,6 +79,7 @@ class AI_Verify_Settings {
             update_option('ai_verify_scraping_service', sanitize_text_field($_POST['ai_verify_scraping_service']));
             update_option('ai_verify_tavily_key', sanitize_text_field($_POST['ai_verify_tavily_key'])); // NEW
             update_option('ai_verify_twitter_api_key', sanitize_text_field($_POST['ai_verify_twitter_api_key'])); // Twitter API Key
+            update_option('ai_verify_reality_defender_key', sanitize_text_field($_POST['ai_verify_reality_defender_key']));
 
             echo '<div class="notice notice-success"><p><strong>✓ Settings saved successfully!</strong></p></div>';
         }
@@ -103,6 +105,7 @@ class AI_Verify_Settings {
         $scraping_service = get_option('ai_verify_scraping_service', 'jina');
         $tavily_key = get_option('ai_verify_tavily_key', ''); // NEW
         $twitter_key = get_option('ai_verify_twitter_api_key', '');
+        $reality_defender_key = get_option('ai_verify_reality_defender_key', '');
         ?>
         
         <div class="wrap">
@@ -184,6 +187,62 @@ class AI_Verify_Settings {
                                 💰 FREE: 1000 searches/month | AI-optimized search for fact-checking<br>
                                 Used when OpenRouter is selected as fact-check provider
                             </p>
+                        </td>
+                    </tr>
+
+                    <tr><th colspan="2"><h2>🛡️ Deepfake Detection API</h2></th></tr>
+                    <tr style="background: #f0fdf4;">
+                        <th scope="row"><label for="ai_verify_reality_defender_key">Reality Defender API Key (Primary)</label></th>
+                        <td>
+                            <input type="text" name="ai_verify_reality_defender_key" id="ai_verify_reality_defender_key" value="<?php echo esc_attr($reality_defender_key); ?>" class="regular-text">
+                            <p class="description">
+                                <strong>✨ BEST OPTION FOR DEEPFAKE DETECTION:</strong> Get your FREE API key from <a href="https://www.realitydefender.com/api" target="_blank">Reality Defender</a><br>
+                                💰 FREE Tier: 50 detections/month (images + audio)<br>
+                                ✓ Enterprise-grade multi-model detection | ✓ 98% accuracy | ✓ Real-time results<br>
+                                🎯 Currently supports: Images (JPG, PNG, WebP) and Audio (MP3, WAV, OGG)<br>
+                                📹 Video support coming soon
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr><th colspan="2"><h2>📊 Deepfake Detection Tool</h2></th></tr>
+                    <tr>
+                        <th scope="row"><label>Shortcode</label></th>
+                        <td>
+                            <code>[ai_deepfake_detector]</code>
+                            <p class="description">
+                                Create a new page and add this shortcode to display the Deepfake Detection Tool.<br>
+                                <strong>Features:</strong> Upload files or paste URLs | Multi-model AI detection | Detection history | Real-time results<br>
+                                <strong>Supported formats:</strong> Images (JPG, PNG, WebP) and Audio (MP3, WAV, OGG)
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr><th colspan="2"><h2>💡 How to Get Reality Defender API Key</h2></th></tr>
+                    <tr>
+                        <td colspan="2">
+                            <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981;">
+                                <h3 style="margin-top: 0; color: #059669;">Step-by-Step Setup:</h3>
+                                <ol style="margin: 0; line-height: 2;">
+                                    <li><strong>Visit:</strong> <a href="https://www.realitydefender.com/api" target="_blank">https://www.realitydefender.com/api</a></li>
+                                    <li><strong>Sign up</strong> for a free account</li>
+                                    <li><strong>Get your API key</strong> from the dashboard</li>
+                                    <li><strong>Paste the key</strong> in the field above</li>
+                                    <li><strong>Save settings</strong> and you're ready to detect deepfakes!</li>
+                                </ol>
+                                
+                                <h4 style="color: #059669; margin-top: 20px;">What You Get:</h4>
+                                <ul style="margin: 0; line-height: 2;">
+                                    <li>✓ <strong>50 free detections per month</strong> (perfect for most websites)</li>
+                                    <li>✓ <strong>Multi-model AI detection</strong> - uses multiple AI models for accuracy</li>
+                                    <li>✓ <strong>Context-aware analysis</strong> - not just faces, entire image/audio patterns</li>
+                                    <li>✓ <strong>Real-time results</strong> in under 5 seconds</li>
+                                    <li>✓ <strong>Detection history</strong> - track all scans</li>
+                                    <li>✓ <strong>Detailed analysis</strong> - manipulation types, confidence levels, recommendations</li>
+                                </ul>
+                                
+                                <p style="margin-top: 16px; margin-bottom: 0;"><strong>💡 Pro Tip:</strong> If you need more than 50 detections/month, Reality Defender offers affordable paid plans starting at $49/month for 500 detections.</p>
+                            </div>
                         </td>
                     </tr>
 

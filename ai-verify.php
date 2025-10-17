@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.0.74
+ * Version: 2.0.75
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.0.74');
+define('AI_VERIFY_VERSION', '2.0.75');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -155,6 +155,10 @@ class AI_Verify {
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/assistant-shortcode.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/assistant-shortcode.php';
         }
+
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/deepfake-detector.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/deepfake-detector.php';
+        }
         
         // Register hooks
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
@@ -213,6 +217,11 @@ class AI_Verify {
 
         if (class_exists('AI_Verify_Assistant_Shortcode')) {
             AI_Verify_Assistant_Shortcode::init();
+        }
+
+        // Initialize Deepfake Detector
+        if (class_exists('AI_Verify_Deepfake_Detector')) {
+            AI_Verify_Deepfake_Detector::init();
         }
     }
     
@@ -423,6 +432,7 @@ register_activation_hook(__FILE__, function() {
     add_option('ai_verify_scraping_service', 'jina');
     add_option('ai_verify_cta_title', 'Want More Verification Tools?');
     add_option('ai_verify_cta_description', 'Access our full suite of professional disinformation monitoring and investigation tools');
+    add_option('ai_verify_reality_defender_key', '');
     add_option('ai_verify_cta_buttons', json_encode(array(
         array('text' => '🔍 OSINT Search', 'url' => 'https://disinformationcommission.com'),
         array('text' => '🌐 Web Monitor', 'url' => 'https://disinformationcommission.com'),
