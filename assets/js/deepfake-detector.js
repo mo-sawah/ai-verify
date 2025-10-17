@@ -27,19 +27,22 @@
         $("#upload-" + tab).addClass("active");
       });
 
-      // File upload area
-      $("#uploadArea").on("click", function () {
-        $("#mediaFile").click();
+      // File upload area - FIXED
+      $("#uploadArea").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $("#mediaFile").trigger("click");
       });
 
       // File selection
       $("#mediaFile").on("change", function (e) {
+        e.stopPropagation(); // Add this
         if (e.target.files.length > 0) {
           self.handleFileSelect(e.target.files[0]);
         }
       });
 
-      // Drag and drop
+      // Drag and drop - FIXED
       $("#uploadArea")
         .on("dragover", function (e) {
           e.preventDefault();

@@ -109,21 +109,23 @@ class AI_Verify_Deepfake_Detector {
         return ob_get_clean();
     }
     
-    /**
-     * Main detection handler
-     */
     public static function detect_deepfake() {
         check_ajax_referer('ai_verify_deepfake_nonce', 'nonce');
         
         $api_key = get_option('ai_verify_reality_defender_key');
         
         if (empty($api_key)) {
-            wp_send_json_error(array('message' => 'Reality Defender API key not configured'));
+            error_log('AI Verify: Reality Defender API key not configured');
+            wp_send_json_error(array(
+                'message' => 'Reality Defender API key not configured. Please add your API key in Settings > AI Verify.'
+            ));
             return;
         }
         
         // Get input type
         $input_type = sanitize_text_field($_POST['input_type']); // 'file' or 'url'
+        
+        error_log('AI Verify: Starting detection - Input type: ' . $input_type);
         
         if ($input_type === 'file') {
             // Handle file upload
@@ -146,8 +148,17 @@ class AI_Verify_Deepfake_Detector {
         }
         
         if (is_wp_error($result)) {
-            wp_send_json_error(array('message' => $result->get_error_message()));
+            $error_code = $result->get_error_code();
+            $error_message = $result->get_error_message();
+            
+            error_log('AI Verify: Detection failed - Code: ' . $error_code . ' | Message: ' . $error_message);
+            
+            wp_send_json_error(array(
+                'message' => $error_message,
+                'code' => $error_code
+            ));
         } else {
+            error_log('AI Verify: Detection successful');
             wp_send_json_success($result);
         }
     }
@@ -230,49 +241,95 @@ class AI_Verify_Deepfake_Detector {
      * Call Reality Defender API
      */
     private static function call_reality_defender_api($file_path, $file_name, $media_type, $api_key) {
+        // Check if API key exists
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'Reality Defender API key not configured. Please add your API key in the plugin settings.');
+        }
+        
+        // IMPORTANT: Verify the correct Reality Defender API endpoint
+        // The correct endpoint might be different - check their documentation
         $api_url = 'https://api.realitydefender.com/v1/detect';
+        
+        // Add error logging to help debug
+        error_log('AI Verify: Calling Reality Defender API at: ' . $api_url);
+        error_log('AI Verify: File: ' . $file_name . ' | Type: ' . $media_type);
         
         // Read file contents
         $file_contents = file_get_contents($file_path);
         
         if ($file_contents === false) {
+            error_log('AI Verify: Failed to read file at: ' . $file_path);
             return new WP_Error('file_read_error', 'Failed to read file');
         }
         
         // Encode file to base64
         $file_base64 = base64_encode($file_contents);
         
-        // Prepare request body
+        // Prepare request body - verify this matches Reality Defender's API spec
         $body = json_encode(array(
             'content' => $file_base64,
             'content_type' => $media_type,
             'filename' => $file_name
         ));
         
-        // Make API request
+        error_log('AI Verify: Request body size: ' . strlen($body) . ' bytes');
+        
+        // Make API request with increased timeout and better error handling
         $response = wp_remote_post($api_url, array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json'
+                'Content-Type' => 'application/json',
+                'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url()
             ),
             'body' => $body,
-            'timeout' => 60
+            'timeout' => 60,
+            'sslverify' => true, // Set to false only for testing
+            'httpversion' => '1.1'
         ));
         
+        // Enhanced error logging
         if (is_wp_error($response)) {
+            $error_message = $response->get_error_message();
+            error_log('AI Verify: API request failed - ' . $error_message);
+            
+            // Check if it's a DNS resolution error
+            if (strpos($error_message, 'Could not resolve host') !== false) {
+                return new WP_Error('dns_error', 
+                    'Cannot connect to Reality Defender API. Please verify:\n' .
+                    '1. Your server can access external APIs\n' .
+                    '2. The API endpoint URL is correct\n' .
+                    '3. Your API key is valid\n\n' .
+                    'Technical error: ' . $error_message
+                );
+            }
+            
             return $response;
         }
         
         $status_code = wp_remote_retrieve_response_code($response);
-        $response_body = json_decode(wp_remote_retrieve_body($response), true);
+        $response_body = wp_remote_retrieve_body($response);
+        
+        error_log('AI Verify: API response status: ' . $status_code);
+        error_log('AI Verify: API response body: ' . substr($response_body, 0, 500));
         
         if ($status_code !== 200) {
-            $error_message = isset($response_body['error']) ? $response_body['error'] : 'API request failed';
-            return new WP_Error('api_error', $error_message);
+            $data = json_decode($response_body, true);
+            $error_message = isset($data['error']) ? $data['error'] : 'API request failed with status ' . $status_code;
+            
+            error_log('AI Verify: API error - ' . $error_message);
+            
+            return new WP_Error('api_error', $error_message . ' (Status: ' . $status_code . ')');
+        }
+        
+        $data = json_decode($response_body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('AI Verify: Failed to parse JSON response');
+            return new WP_Error('json_error', 'Invalid JSON response from API');
         }
         
         // Parse response
-        return self::parse_detection_response($response_body, $media_type);
+        return self::parse_detection_response($data, $media_type);
     }
     
     /**
