@@ -238,114 +238,62 @@ class AI_Verify_Deepfake_Detector {
     }
     
     /**
-     * Call Reality Defender API - CORRECTED based on official documentation
-     * Docs: https://docs.realitydefender.com/api-reference/endpoint/get_all_media
+     * Call Reality Defender API - BETTER VERSION using wp_remote_post properly
      */
     private static function call_reality_defender_api($file_path, $file_name, $media_type, $api_key) {
-        error_log('AI Verify: Starting Reality Defender API call for: ' . $file_name);
+        error_log('AI Verify: Starting Reality Defender detection for: ' . $file_name);
         
-        // CORRECT API ENDPOINT from documentation
         $api_url = 'https://api.realitydefender.com/media/';
         
-        // Read file contents
-        if (!file_exists($file_path)) {
-            error_log('AI Verify: File does not exist: ' . $file_path);
-            return new WP_Error('file_not_found', 'File not found');
+        // Use cURL directly since WordPress doesn't handle multipart well
+        if (!function_exists('curl_init')) {
+            return new WP_Error('no_curl', 'cURL is required but not available on this server');
         }
         
-        $file_contents = file_get_contents($file_path);
+        $ch = curl_init();
         
-        if ($file_contents === false) {
-            error_log('AI Verify: Failed to read file');
-            return new WP_Error('file_read_error', 'Failed to read file');
-        }
+        // Prepare the file for upload
+        $cfile = new CURLFile($file_path, mime_content_type($file_path), $file_name);
         
-        // Get mime type
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime_type = finfo_file($finfo, $file_path);
-        finfo_close($finfo);
-        
-        error_log('AI Verify: File size: ' . strlen($file_contents) . ' bytes | MIME: ' . $mime_type);
-        
-        // Reality Defender expects multipart/form-data, NOT JSON with base64
-        // We need to build a proper multipart request
-        $boundary = wp_generate_password(24, false);
-        
-        $body = '';
-        
-        // Add the file
-        $body .= "--{$boundary}\r\n";
-        $body .= "Content-Disposition: form-data; name=\"file\"; filename=\"{$file_name}\"\r\n";
-        $body .= "Content-Type: {$mime_type}\r\n\r\n";
-        $body .= $file_contents . "\r\n";
-        $body .= "--{$boundary}--\r\n";
-        
-        error_log('AI Verify: Calling Reality Defender API: ' . $api_url);
-        
-        // Make API request with multipart/form-data
-        $response = wp_remote_post($api_url, array(
-            'headers' => array(
-                'x-api-key' => $api_key, // Reality Defender uses x-api-key, not Bearer
-                'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
+        curl_setopt_array($ch, array(
+            CURLOPT_URL => $api_url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => array(
+                'x-api-key: ' . $api_key
             ),
-            'body' => $body,
-            'timeout' => 60,
-            'sslverify' => true,
-            'httpversion' => '1.1'
+            CURLOPT_POSTFIELDS => array(
+                'file' => $cfile
+            ),
+            CURLOPT_TIMEOUT => 60
         ));
         
-        if (is_wp_error($response)) {
-            $error_message = $response->get_error_message();
-            error_log('AI Verify: API request failed - ' . $error_message);
-            
-            // More helpful error messages
-            if (strpos($error_message, 'Could not resolve host') !== false) {
-                return new WP_Error('dns_error', 
-                    'Cannot connect to Reality Defender API. Please verify:' . "\n" .
-                    '1. Your server can access external APIs' . "\n" .
-                    '2. The API endpoint URL is correct' . "\n" .
-                    '3. Your API key is valid' . "\n\n" .
-                    'Technical error: ' . $error_message
-                );
-            }
-            
-            return $response;
+        $response_body = curl_exec($ch);
+        $status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        
+        curl_close($ch);
+        
+        if ($error) {
+            error_log('AI Verify: cURL error - ' . $error);
+            return new WP_Error('curl_error', 'Connection error: ' . $error);
         }
         
-        $status_code = wp_remote_retrieve_response_code($response);
-        $response_body = wp_remote_retrieve_body($response);
-        
         error_log('AI Verify: Response status: ' . $status_code);
-        error_log('AI Verify: Response body (first 500 chars): ' . substr($response_body, 0, 500));
+        error_log('AI Verify: Response: ' . substr($response_body, 0, 500));
         
         if ($status_code !== 200 && $status_code !== 201) {
             $data = json_decode($response_body, true);
-            $error_message = 'API request failed';
-            
-            if (isset($data['detail'])) {
-                $error_message = $data['detail'];
-            } elseif (isset($data['message'])) {
-                $error_message = $data['message'];
-            } elseif (isset($data['error'])) {
-                $error_message = $data['error'];
-            }
-            
-            error_log('AI Verify: API error - ' . $error_message);
-            
-            return new WP_Error('api_error', $error_message . ' (Status: ' . $status_code . ')');
+            $message = isset($data['detail']) ? $data['detail'] : 'API error (Status: ' . $status_code . ')';
+            return new WP_Error('api_error', $message);
         }
         
         $data = json_decode($response_body, true);
         
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('AI Verify: Failed to parse JSON: ' . json_last_error_msg());
-            error_log('AI Verify: Raw response: ' . $response_body);
-            return new WP_Error('json_error', 'Invalid JSON response from API');
+        if (!$data) {
+            return new WP_Error('json_error', 'Invalid API response');
         }
         
-        error_log('AI Verify: Successfully parsed response');
-        
-        // Parse response according to Reality Defender's actual response format
         return self::parse_detection_response($data, $media_type);
     }
     
