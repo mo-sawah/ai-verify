@@ -27,32 +27,55 @@ if (!defined('ABSPATH')) {
             <?php endif; ?>
             
             <div class="detection-stats">
-                <div class="stat-item">
-                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
-                    </svg>
-                    <div>
-                        <strong>98%</strong>
-                        <span>Accuracy Rate</span>
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-green">
+                        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">98%</div>
+                        <div class="stat-label">Accuracy Rate</div>
+                        <div class="stat-desc">Enterprise-grade precision</div>
                     </div>
                 </div>
-                <div class="stat-item">
-                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/>
-                    </svg>
-                    <div>
-                        <strong>&lt;5 sec</strong>
-                        <span>Detection Time</span>
+                
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-blue">
+                        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">&lt;5 sec</div>
+                        <div class="stat-label">Detection Time</div>
+                        <div class="stat-desc">Real-time analysis</div>
                     </div>
                 </div>
-                <div class="stat-item">
-                    <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                        <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"/>
-                    </svg>
-                    <div>
-                        <strong>Multi-Model</strong>
-                        <span>AI Detection</span>
+                
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-purple">
+                        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">Multi-Model</div>
+                        <div class="stat-label">AI Detection</div>
+                        <div class="stat-desc">Advanced algorithms</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-orange">
+                        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">Secure</div>
+                        <div class="stat-label">Privacy Protected</div>
+                        <div class="stat-desc">Data encrypted</div>
                     </div>
                 </div>
             </div>
