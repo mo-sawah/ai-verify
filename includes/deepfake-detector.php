@@ -238,67 +238,73 @@ class AI_Verify_Deepfake_Detector {
     }
     
     /**
-     * Call Reality Defender API
+     * Call Reality Defender API - CORRECTED based on official documentation
+     * Docs: https://docs.realitydefender.com/api-reference/endpoint/get_all_media
      */
     private static function call_reality_defender_api($file_path, $file_name, $media_type, $api_key) {
-        // Check if API key exists
-        if (empty($api_key)) {
-            return new WP_Error('no_api_key', 'Reality Defender API key not configured. Please add your API key in the plugin settings.');
-        }
+        error_log('AI Verify: Starting Reality Defender API call for: ' . $file_name);
         
-        // IMPORTANT: Verify the correct Reality Defender API endpoint
-        // The correct endpoint might be different - check their documentation
-        $api_url = 'https://api.realitydefender.com/v1/detect';
-        
-        // Add error logging to help debug
-        error_log('AI Verify: Calling Reality Defender API at: ' . $api_url);
-        error_log('AI Verify: File: ' . $file_name . ' | Type: ' . $media_type);
+        // CORRECT API ENDPOINT from documentation
+        $api_url = 'https://api.realitydefender.com/media/';
         
         // Read file contents
+        if (!file_exists($file_path)) {
+            error_log('AI Verify: File does not exist: ' . $file_path);
+            return new WP_Error('file_not_found', 'File not found');
+        }
+        
         $file_contents = file_get_contents($file_path);
         
         if ($file_contents === false) {
-            error_log('AI Verify: Failed to read file at: ' . $file_path);
+            error_log('AI Verify: Failed to read file');
             return new WP_Error('file_read_error', 'Failed to read file');
         }
         
-        // Encode file to base64
-        $file_base64 = base64_encode($file_contents);
+        // Get mime type
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime_type = finfo_file($finfo, $file_path);
+        finfo_close($finfo);
         
-        // Prepare request body - verify this matches Reality Defender's API spec
-        $body = json_encode(array(
-            'content' => $file_base64,
-            'content_type' => $media_type,
-            'filename' => $file_name
-        ));
+        error_log('AI Verify: File size: ' . strlen($file_contents) . ' bytes | MIME: ' . $mime_type);
         
-        error_log('AI Verify: Request body size: ' . strlen($body) . ' bytes');
+        // Reality Defender expects multipart/form-data, NOT JSON with base64
+        // We need to build a proper multipart request
+        $boundary = wp_generate_password(24, false);
         
-        // Make API request with increased timeout and better error handling
+        $body = '';
+        
+        // Add the file
+        $body .= "--{$boundary}\r\n";
+        $body .= "Content-Disposition: form-data; name=\"file\"; filename=\"{$file_name}\"\r\n";
+        $body .= "Content-Type: {$mime_type}\r\n\r\n";
+        $body .= $file_contents . "\r\n";
+        $body .= "--{$boundary}--\r\n";
+        
+        error_log('AI Verify: Calling Reality Defender API: ' . $api_url);
+        
+        // Make API request with multipart/form-data
         $response = wp_remote_post($api_url, array(
             'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url()
+                'x-api-key' => $api_key, // Reality Defender uses x-api-key, not Bearer
+                'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
             ),
             'body' => $body,
             'timeout' => 60,
-            'sslverify' => true, // Set to false only for testing
+            'sslverify' => true,
             'httpversion' => '1.1'
         ));
         
-        // Enhanced error logging
         if (is_wp_error($response)) {
             $error_message = $response->get_error_message();
             error_log('AI Verify: API request failed - ' . $error_message);
             
-            // Check if it's a DNS resolution error
+            // More helpful error messages
             if (strpos($error_message, 'Could not resolve host') !== false) {
                 return new WP_Error('dns_error', 
-                    'Cannot connect to Reality Defender API. Please verify:\n' .
-                    '1. Your server can access external APIs\n' .
-                    '2. The API endpoint URL is correct\n' .
-                    '3. Your API key is valid\n\n' .
+                    'Cannot connect to Reality Defender API. Please verify:' . "\n" .
+                    '1. Your server can access external APIs' . "\n" .
+                    '2. The API endpoint URL is correct' . "\n" .
+                    '3. Your API key is valid' . "\n\n" .
                     'Technical error: ' . $error_message
                 );
             }
@@ -309,12 +315,20 @@ class AI_Verify_Deepfake_Detector {
         $status_code = wp_remote_retrieve_response_code($response);
         $response_body = wp_remote_retrieve_body($response);
         
-        error_log('AI Verify: API response status: ' . $status_code);
-        error_log('AI Verify: API response body: ' . substr($response_body, 0, 500));
+        error_log('AI Verify: Response status: ' . $status_code);
+        error_log('AI Verify: Response body (first 500 chars): ' . substr($response_body, 0, 500));
         
-        if ($status_code !== 200) {
+        if ($status_code !== 200 && $status_code !== 201) {
             $data = json_decode($response_body, true);
-            $error_message = isset($data['error']) ? $data['error'] : 'API request failed with status ' . $status_code;
+            $error_message = 'API request failed';
+            
+            if (isset($data['detail'])) {
+                $error_message = $data['detail'];
+            } elseif (isset($data['message'])) {
+                $error_message = $data['message'];
+            } elseif (isset($data['error'])) {
+                $error_message = $data['error'];
+            }
             
             error_log('AI Verify: API error - ' . $error_message);
             
@@ -324,55 +338,89 @@ class AI_Verify_Deepfake_Detector {
         $data = json_decode($response_body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('AI Verify: Failed to parse JSON response');
+            error_log('AI Verify: Failed to parse JSON: ' . json_last_error_msg());
+            error_log('AI Verify: Raw response: ' . $response_body);
             return new WP_Error('json_error', 'Invalid JSON response from API');
         }
         
-        // Parse response
+        error_log('AI Verify: Successfully parsed response');
+        
+        // Parse response according to Reality Defender's actual response format
         return self::parse_detection_response($data, $media_type);
     }
     
     /**
      * Parse Reality Defender API response
+     * Based on their actual response structure
      */
     private static function parse_detection_response($response, $media_type) {
-        // Extract key information
-        $detection_id = isset($response['id']) ? $response['id'] : uniqid('detection_');
-        $score = isset($response['score']) ? floatval($response['score']) : 0;
+        error_log('AI Verify: Parsing detection response');
+        
+        // Reality Defender returns: { "media_id": "xxx", "status": "processing" or "complete", "results": {...} }
+        
+        $detection_id = isset($response['media_id']) ? $response['media_id'] : uniqid('detection_');
+        
+        // Check if results are available
+        if (isset($response['status']) && $response['status'] === 'processing') {
+            // If still processing, we need to poll for results
+            // For now, return a placeholder
+            return new WP_Error('processing', 'Media is still being processed. This may take a few moments.');
+        }
+        
+        // Extract results based on Reality Defender's response format
+        // According to docs, they return: { "deepfake_probability": 0.0-1.0, "label": "real" or "fake" }
+        $results = isset($response['results']) ? $response['results'] : $response;
+        
+        $deepfake_probability = isset($results['deepfake_probability']) ? floatval($results['deepfake_probability']) : 0;
+        $score = $deepfake_probability * 100; // Convert to percentage
+        
         $is_deepfake = $score >= 50; // Threshold: 50% or higher = likely deepfake
         
-        // Determine confidence level
-        if ($score >= 80) {
+        // Determine confidence level based on how far from threshold
+        $distance_from_threshold = abs($score - 50);
+        if ($distance_from_threshold >= 40) {
             $confidence = 'very_high';
-        } elseif ($score >= 60) {
+        } elseif ($distance_from_threshold >= 30) {
             $confidence = 'high';
-        } elseif ($score >= 40) {
+        } elseif ($distance_from_threshold >= 20) {
             $confidence = 'medium';
-        } elseif ($score >= 20) {
+        } elseif ($distance_from_threshold >= 10) {
             $confidence = 'low';
         } else {
             $confidence = 'very_low';
         }
         
-        // Extract detailed analysis
+        // Extract model information if available
+        $models_used = array('Reality Defender Multi-Model');
+        if (isset($results['model_version'])) {
+            $models_used[] = 'Model Version: ' . $results['model_version'];
+        }
+        
+        $manipulation_types = array();
+        if (isset($results['manipulation_types']) && is_array($results['manipulation_types'])) {
+            $manipulation_types = $results['manipulation_types'];
+        }
+        
+        // Build analysis details
         $analysis = array(
             'detection_method' => 'Reality Defender Multi-Model',
-            'models_used' => isset($response['models']) ? $response['models'] : array(),
-            'manipulation_types' => isset($response['manipulation_types']) ? $response['manipulation_types'] : array(),
-            'regions_analyzed' => isset($response['regions']) ? $response['regions'] : array(),
-            'artifacts_detected' => isset($response['artifacts']) ? $response['artifacts'] : array()
+            'models_used' => $models_used,
+            'manipulation_types' => $manipulation_types,
+            'regions_analyzed' => isset($results['regions']) ? $results['regions'] : array('Full content analysis'),
+            'artifacts_detected' => isset($results['artifacts']) ? $results['artifacts'] : array()
         );
         
         return array(
             'detection_id' => $detection_id,
             'media_type' => $media_type,
             'is_deepfake' => $is_deepfake,
-            'detection_score' => $score,
+            'detection_score' => round($score, 2),
             'confidence_level' => $confidence,
             'verdict' => self::get_verdict($score),
             'analysis' => $analysis,
             'recommendations' => self::get_recommendations($score, $is_deepfake),
-            'timestamp' => current_time('mysql')
+            'timestamp' => current_time('mysql'),
+            'raw_response' => $results // Keep for debugging
         );
     }
     

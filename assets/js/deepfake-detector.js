@@ -27,20 +27,30 @@
         $("#upload-" + tab).addClass("active");
       });
 
-      // File upload area - FIXED
+      // File upload area - FIXED: Use native DOM click, not jQuery
       $("#uploadArea").on("click", function (e) {
+        // Don't trigger if clicking on the input itself
+        if (e.target.id === "mediaFile") {
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
-        $("#mediaFile").trigger("click");
+        // Use native DOM click instead of jQuery
+        document.getElementById("mediaFile").click();
       });
 
-      // File selection
-      $("#mediaFile").on("change", function (e) {
-        e.stopPropagation(); // Add this
-        if (e.target.files.length > 0) {
-          self.handleFileSelect(e.target.files[0]);
-        }
-      });
+      // File selection - FIXED: Stop propagation immediately
+      $("#mediaFile")
+        .on("change", function (e) {
+          e.stopPropagation();
+          if (e.target.files.length > 0) {
+            self.handleFileSelect(e.target.files[0]);
+          }
+        })
+        .on("click", function (e) {
+          // Stop click from bubbling to parent
+          e.stopPropagation();
+        });
 
       // Drag and drop - FIXED
       $("#uploadArea")
