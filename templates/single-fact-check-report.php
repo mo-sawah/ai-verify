@@ -125,13 +125,53 @@ if (empty($report_data)) {
                 }
                 
                 function recheckReport() {
-                    if (confirm('This will create a new analysis of the same content. Continue?')) {
-                        const reportData = window.aiVerifyReportData;
-                        if (reportData && reportData.input_value) {
-                            window.location.href = '<?php echo home_url('/fact-check/'); ?>?recheck=' + encodeURIComponent(reportData.input_value);
-                        }
+                    if (!confirm('This will create a new analysis of the same content. Continue?')) {
+                        return;
                     }
+                    
+                    const reportData = window.aiVerifyReportData;
+                    if (!reportData || !reportData.input_value) {
+                        alert('Unable to recheck: missing report data');
+                        return;
+                    }
+                    
+                    // Show loading state
+                    const btn = document.querySelector('.recheck-btn');
+                    btn.disabled = true;
+                    btn.innerHTML = '<svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24" style="animation: spin 1s linear infinite;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" opacity="0.3"></path><path d="M12 2v4c3.31 0 6 2.69 6 6h4c0-5.52-4.48-10-10-10z"></path></svg> Starting...';
+                    
+                    // Start new fact-check via AJAX
+                    jQuery.ajax({
+                        url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                        type: 'POST',
+                        data: {
+                            action: 'ai_verify_start_factcheck',
+                            nonce: '<?php echo wp_create_nonce('ai_verify_factcheck_nonce'); ?>',
+                            input_type: reportData.input_type,
+                            input_value: reportData.input_value
+                        },
+                        success: function(response) {
+                            if (response.success && response.data.report_url) {
+                                window.location.href = response.data.report_url;
+                            } else {
+                                alert(response.data.message || 'Failed to start recheck');
+                                btn.disabled = false;
+                                btn.innerHTML = '<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Re-check';
+                            }
+                        },
+                        error: function() {
+                            alert('Network error. Please try again.');
+                            btn.disabled = false;
+                            btn.innerHTML = '<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Re-check';
+                        }
+                    });
                 }
+                
+                <style>
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                </style>
                 
                 // Close share menu when clicking outside
                 document.addEventListener('click', function(e) {

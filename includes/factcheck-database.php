@@ -30,6 +30,10 @@ class AI_Verify_Factcheck_Database {
             user_name varchar(255) DEFAULT NULL,
             user_ip varchar(45) DEFAULT NULL,
             status varchar(20) DEFAULT 'processing',
+            progress int(3) DEFAULT 0,
+            progress_message text DEFAULT NULL,
+            current_claim text DEFAULT NULL,
+            claim_number int DEFAULT 0,
             content_type varchar(50) DEFAULT NULL,
             scraped_content longtext DEFAULT NULL,
             claims longtext DEFAULT NULL,
@@ -93,21 +97,31 @@ class AI_Verify_Factcheck_Database {
     }
 
     /**
-     * Update processing progress
+     * Update processing progress with optional claim details
      */
-    public static function update_progress($report_id, $progress, $message = '') {
+    public static function update_progress($report_id, $progress, $message = '', $current_claim = null, $claim_number = null) {
         global $wpdb;
         
         $table = $wpdb->prefix . 'ai_verify_factcheck_reports';
         
+        $update_data = array(
+            'progress' => $progress,
+            'progress_message' => $message
+        );
+        
+        if ($current_claim !== null) {
+            $update_data['current_claim'] = $current_claim;
+        }
+        
+        if ($claim_number !== null) {
+            $update_data['claim_number'] = $claim_number;
+        }
+        
         $wpdb->update(
             $table,
-            array(
-                'progress' => $progress,
-                'progress_message' => $message
-            ),
+            $update_data,
             array('report_id' => $report_id),
-            array('%d', '%s'),
+            array('%d', '%s', '%s', '%d'),
             array('%s')
         );
     }

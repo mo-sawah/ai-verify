@@ -226,11 +226,20 @@ class AI_Verify_Factcheck_Ajax {
         );
         
         $post_id = AI_Verify_Factcheck_Post_Generator::create_report_post($report_id, $placeholder_data);
-        $report_url = $post_id ? get_permalink($post_id) : (aiVerifyFactcheck.results_url . '?report=' . $report_id);
+        
+        // Get the dedicated processing page if set
+        $processing_page_id = get_option('ai_verify_processing_page_id');
+        if ($processing_page_id) {
+            // Use dedicated processing page
+            $processing_url = add_query_arg('report', $report_id, get_permalink($processing_page_id));
+        } else {
+            // Use report post with processing parameter
+            $processing_url = add_query_arg('processing', '1', get_permalink($post_id));
+        }
         
         wp_send_json_success(array(
             'report_id' => $report_id,
-            'report_url' => $report_url,
+            'report_url' => $processing_url,
             'message' => 'Report created successfully'
         ));
     }
@@ -268,7 +277,7 @@ class AI_Verify_Factcheck_Ajax {
     }
 
     /**
-     * Background processor (runs via WP Cron) - FIXED WITH TRENDS INTEGRATION
+     * Background processor (runs via WP Cron) - WITH PROGRESS TRACKING
      */
     public static function background_process_report($report_id) {
         error_log("AI Verify: Background processing started for report: $report_id");
@@ -284,27 +293,36 @@ class AI_Verify_Factcheck_Ajax {
             // Get the selected provider from settings
             $provider = get_option('ai_verify_factcheck_provider', 'perplexity');
             
-            // Step 1: Get content (same as before)
+            // STEP 1: Get content with progress tracking
+            AI_Verify_Factcheck_Database::update_progress($report_id, 5, 'Connecting to content source...');
+            
             $content = '';
             $context = '';
             if ($report['input_type'] === 'url') {
+                AI_Verify_Factcheck_Database::update_progress($report_id, 10, 'Extracting article content...');
+                
                 $scraped = AI_Verify_Factcheck_Scraper::scrape_url($report['input_value']);
                 if (is_wp_error($scraped)) {
                     throw new Exception($scraped->get_error_message());
                 }
-                // Pass the scraped data array directly (not JSON encoded)
+                // Pass array instead of JSON
                 AI_Verify_Factcheck_Database::save_scraped_content($report_id, $scraped, 'article');
                 $content = $scraped['content'];
                 $context = $scraped['title'];
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 15, 'Content extracted successfully');
             } else {
                 $content = $report['input_value'];
                 $context = $report['input_value'];
+                AI_Verify_Factcheck_Database::update_progress($report_id, 15, 'Text received for analysis');
             }
 
-            // Step 2: ROUTING LOGIC - Choose analysis method
+            // STEP 2: ROUTING LOGIC - Choose analysis method
             if ($provider === 'single_call_perplexity' || $provider === 'single_call_openrouter') {
-                // Single call workflow
+                // Single call workflow with progress updates
                 error_log("AI Verify: Using Hybrid Single Call workflow with provider: $provider");
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 20, 'Searching for existing fact-checks...');
 
                 $google_key = get_option('ai_verify_google_factcheck_key');
                 $google_factcheck_context = '';
@@ -315,6 +333,8 @@ class AI_Verify_Factcheck_Ajax {
                     }
                 }
 
+                AI_Verify_Factcheck_Database::update_progress($report_id, 25, 'Gathering reference sources...');
+                
                 $web_results = AI_Verify_Factcheck_Analyzer::search_web_tavily($context);
                 if (empty($web_results)) {
                     $web_results = AI_Verify_Factcheck_Analyzer::search_web_firecrawl($context);
@@ -329,6 +349,8 @@ class AI_Verify_Factcheck_Ajax {
 
                 $combined_context = $google_factcheck_context . $web_search_context;
 
+                AI_Verify_Factcheck_Database::update_progress($report_id, 35, 'Starting AI analysis...');
+                
                 if ($provider === 'single_call_perplexity') {
                     $result_data = AI_Verify_Factcheck_Hybrid_Analyzer::analyze_with_single_call_perplexity($content, $context, $combined_context);
                 } else {
@@ -343,6 +365,8 @@ class AI_Verify_Factcheck_Ajax {
                     throw new Exception('AI failed to generate a valid report.');
                 }
 
+                AI_Verify_Factcheck_Database::update_progress($report_id, 75, 'Processing analysis results...');
+                
                 $factcheck_results = $result_data['factcheck_results'];
                 $overall_score = $result_data['overall_score'] ?? 50;
                 $credibility_rating = $result_data['credibility_rating'] ?? 'Mixed Credibility';
@@ -356,6 +380,8 @@ class AI_Verify_Factcheck_Ajax {
                 }
                 $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
 
+                AI_Verify_Factcheck_Database::update_progress($report_id, 85, 'Finalizing report...');
+                
                 AI_Verify_Factcheck_Database::save_results(
                     $report_id,
                     $factcheck_results,
@@ -366,14 +392,43 @@ class AI_Verify_Factcheck_Ajax {
                 );
 
             } else {
-                // Multi-step workflow
+                // Multi-step workflow with progress tracking
                 error_log("AI Verify: Using Multi-Step workflow with provider: $provider");
                 
+                AI_Verify_Factcheck_Database::update_progress($report_id, 30, 'Analyzing content for bias...');
                 $propaganda = AI_Verify_Factcheck_Analyzer::detect_propaganda($content);
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 40, 'Extracting verifiable claims...');
                 $claims = AI_Verify_Factcheck_Analyzer::extract_claims($content);
                 AI_Verify_Factcheck_Database::save_claims($report_id, $claims);
                 
-                $factcheck_results = AI_Verify_Factcheck_Analyzer::factcheck_claims($claims, $context, $report['input_value']);
+                $total_claims = count($claims);
+                error_log("AI Verify: Found {$total_claims} claims to verify");
+                
+                // Update progress for each claim
+                $factcheck_results = array();
+                foreach ($claims as $index => $claim) {
+                    $claim_num = $index + 1;
+                    $claim_text = is_array($claim) ? ($claim['text'] ?? '') : $claim;
+                    $progress = 40 + (($index / $total_claims) * 35); // 40-75%
+                    
+                    AI_Verify_Factcheck_Database::update_progress(
+                        $report_id, 
+                        $progress, 
+                        "Verifying claim {$claim_num} of {$total_claims}...",
+                        $claim_text,
+                        $claim_num
+                    );
+                    
+                    // Verify this claim
+                    $claim_results = AI_Verify_Factcheck_Analyzer::factcheck_claims(array($claim), $context, $report['input_value']);
+                    if (!empty($claim_results)) {
+                        $factcheck_results = array_merge($factcheck_results, $claim_results);
+                    }
+                }
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 80, 'Calculating credibility score...');
+                
                 $overall_score = AI_Verify_Factcheck_Analyzer::calculate_overall_score($factcheck_results);
                 $credibility_rating = AI_Verify_Factcheck_Analyzer::get_credibility_rating($overall_score);
                 
@@ -386,6 +441,8 @@ class AI_Verify_Factcheck_Ajax {
                     }
                 }
                 $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 90, 'Finalizing report...');
                 
                 AI_Verify_Factcheck_Database::save_results(
                     $report_id,
@@ -435,7 +492,8 @@ class AI_Verify_Factcheck_Ajax {
 
         } catch (Exception $e) {
             error_log("AI Verify: ❌ Error processing report $report_id: " . $e->getMessage());
-            AI_Verify_Factcheck_Database::update_status($report_id, 'failed');
+            AI_Verify_Factcheck_Database::update_status($report_id, 'error');
+            AI_Verify_Factcheck_Database::update_progress($report_id, 0, $e->getMessage());
         }
     }
 
@@ -453,8 +511,26 @@ class AI_Verify_Factcheck_Ajax {
             wp_send_json_error(array('message' => 'Report not found'));
         }
         
+        // Get the post URL for redirect when complete
+        $report_url = '';
+        $posts = get_posts(array(
+            'post_type' => 'fact_check_report',
+            'meta_key' => 'report_id',
+            'meta_value' => $report_id,
+            'posts_per_page' => 1,
+            'post_status' => 'publish'
+        ));
+        if (!empty($posts)) {
+            $report_url = get_permalink($posts[0]->ID);
+        }
+        
         wp_send_json_success(array(
-            'status' => $report['status']
+            'status' => $report['status'],
+            'progress' => isset($report['progress']) ? intval($report['progress']) : 0,
+            'message' => isset($report['progress_message']) ? $report['progress_message'] : '',
+            'current_claim' => isset($report['current_claim']) ? $report['current_claim'] : null,
+            'claim_number' => isset($report['claim_number']) ? intval($report['claim_number']) : null,
+            'report_url' => $report_url
         ));
     }
     
