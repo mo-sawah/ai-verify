@@ -74,25 +74,20 @@ if (!defined('ABSPATH')) {
                 <h3>Analyzed Content</h3>
             </div>
             <div class="source-article-content">
+                <div class="source-article-image" id="sourceImage" style="display: none;">
+                    <img src="" alt="Article thumbnail" id="sourceImageImg">
+                </div>
                 <div class="source-article-main">
-                    <div class="source-favicon" id="sourceFavicon">
-                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path>
-                        </svg>
-                    </div>
                     <div class="source-article-info">
-                        <h4 id="sourceTitle" class="source-title">Loading...</h4>
+                        <a href="#" id="sourceUrl" class="source-title-link" target="_blank" rel="noopener noreferrer">
+                            <h4 id="sourceTitle" class="source-title">Loading...</h4>
+                        </a>
                         <div class="source-meta">
+                            <span class="source-favicon-inline" id="sourceFaviconInline"></span>
                             <span class="source-domain" id="sourceDomain">-</span>
                             <span class="source-separator">•</span>
                             <span class="source-date" id="sourceDate">-</span>
                         </div>
-                        <a href="#" id="sourceUrl" class="source-link" target="_blank" rel="noopener noreferrer">
-                            View Original Article
-                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                            </svg>
-                        </a>
                     </div>
                 </div>
                 <div class="source-article-badge">

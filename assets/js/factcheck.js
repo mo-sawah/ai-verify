@@ -419,24 +419,51 @@ let currentReportId = null;
         // Show the card
         $("#sourceArticleCard").fadeIn(300);
 
-        // Set favicon
+        // Set inline favicon before domain name
         const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-        $("#sourceFavicon").html(
-          `<img src="${faviconUrl}" alt="${domain}" onerror="this.parentElement.innerHTML='<svg width=\\"20\\" height=\\"20\\" fill=\\"currentColor\\" viewBox=\\"0 0 24 24\\"><path d=\\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z\\"></path></svg>'">`
+        $("#sourceFaviconInline").html(
+          `<img src="${faviconUrl}" alt="${domain}" onerror="this.style.display='none'">`
         );
 
-        // Set title (try to extract from scraped content or use input value)
+        // Extract title from scraped content or use URL
         let title = report.input_value;
+        let featuredImage = null;
+
         if (report.scraped_content) {
-          // Try to extract title from scraped content if available
+          // Try to extract title
           const titleMatch = report.scraped_content.match(
             /<title>(.*?)<\/title>/i
           );
           if (titleMatch && titleMatch[1]) {
-            title = titleMatch[1].replace(/&[^;]+;/g, " ").trim();
+            title = titleMatch[1]
+              .replace(/&amp;/g, "&")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&quot;/g, '"')
+              .replace(/&#039;/g, "'")
+              .trim();
+          }
+
+          // Try to extract Open Graph image
+          const ogImageMatch = report.scraped_content.match(
+            /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i
+          );
+          if (ogImageMatch && ogImageMatch[1]) {
+            featuredImage = ogImageMatch[1];
+          } else {
+            // Try Twitter card image
+            const twitterImageMatch = report.scraped_content.match(
+              /<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i
+            );
+            if (twitterImageMatch && twitterImageMatch[1]) {
+              featuredImage = twitterImageMatch[1];
+            }
           }
         }
+
+        // Set title as clickable link
         $("#sourceTitle").text(title);
+        $("#sourceUrl").attr("href", report.input_value);
 
         // Set domain
         $("#sourceDomain").text(domain);
@@ -444,8 +471,15 @@ let currentReportId = null;
         // Set date
         $("#sourceDate").text(formatDate(report.created_at));
 
-        // Set URL link
-        $("#sourceUrl").attr("href", report.input_value);
+        // Display featured image if found
+        if (featuredImage) {
+          const $img = $("#sourceImageImg");
+          $img.on("error", function () {
+            $("#sourceImage").hide();
+          });
+          $img.attr("src", featuredImage).attr("alt", title);
+          $("#sourceImage").fadeIn(200);
+        }
 
         // Update badge
         const score = parseFloat(report.overall_score) || 0;
