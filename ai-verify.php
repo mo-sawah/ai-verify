@@ -3,7 +3,7 @@
  * Plugin Name: AI Verify
  * Plugin URI: https://sawahsolutions.com
  * Description: Professional fact-check verification tools with AI chatbot, reverse image search, and related fact-checks
- * Version: 2.1.0
+ * Version: 2.2.0
  * Author: Mohamed Sawah
  * Author URI: https://sawahsolutions.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AI_VERIFY_VERSION', '2.1.0');
+define('AI_VERIFY_VERSION', '2.2.0');
 define('AI_VERIFY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AI_VERIFY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -68,6 +68,12 @@ class AI_Verify {
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-database.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-database.php';
         }
+        
+        // NEW: Load fact-check post generator (creates WordPress posts for completed reports)
+        if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-post-generator.php')) {
+            require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-post-generator.php';
+        }
+        
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-scraper.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/factcheck-scraper.php';
         }
@@ -98,7 +104,6 @@ class AI_Verify {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/trending-helpers.php';
         }
 
-        // NEW CODE - ADD:
         // Load Intelligence Dashboard (Phase 1 & 2)
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'includes/trends-database-upgrade.php')) {
             require_once AI_VERIFY_PLUGIN_DIR . 'includes/trends-database-upgrade.php';
@@ -200,63 +205,24 @@ class AI_Verify {
         if (class_exists('AI_Verify_Trends_Widget')) {
             AI_Verify_Trends_Widget::init();
         }
-
-        // Initialize Chat Assistant
-        if (class_exists('AI_Verify_Chat_Assistant')) {
-            AI_Verify_Chat_Assistant::init();
+        
+        // Initialize fact-check AJAX handler
+        if (class_exists('AI_Verify_Factcheck_Ajax')) {
+            AI_Verify_Factcheck_Ajax::init();
         }
-
-        // Initialize Intelligence Dashboard
-        if (class_exists('AI_Verify_Intelligence_Dashboard')) {
-            AI_Verify_Intelligence_Dashboard::init();
-        }
-
-        if (class_exists('AI_Verify_Assistant_Page')) {
-            AI_Verify_Assistant_Page::init();
-        }
-
+        
+        // Initialize assistant shortcode
         if (class_exists('AI_Verify_Assistant_Shortcode')) {
             AI_Verify_Assistant_Shortcode::init();
         }
 
-        // Initialize Deepfake Detector
-        if (class_exists('AI_Verify_Deepfake_Detector')) {
-            AI_Verify_Deepfake_Detector::init();
+        if (class_exists('AI_Verify_Chat_Assistant')) {
+            AI_Verify_Chat_Assistant::init();
         }
     }
     
     public function enqueue_assets() {
-        // ALWAYS enqueue widget assets (for widgets/shortcodes on any page)
-        $this->enqueue_widget_assets();
-        
-        // Only load verification tools CSS/JS on singular posts
-        if (!is_singular('post')) {
-            return;
-        }
-        
-        wp_enqueue_style(
-            'ai-verify-styles',
-            AI_VERIFY_PLUGIN_URL . 'assets/css/ai-verify.css',
-            array(),
-            AI_VERIFY_VERSION
-        );
-        
-        wp_enqueue_script(
-            'ai-verify-script',
-            AI_VERIFY_PLUGIN_URL . 'assets/js/ai-verify.js',
-            array('jquery'),
-            AI_VERIFY_VERSION,
-            true
-        );
-        
-        wp_localize_script('ai-verify-script', 'aiVerifyData', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('ai_verify_nonce'),
-            'post_id' => get_the_ID()
-        ));
-    }
-    
-    public function enqueue_widget_assets() {
+        // Prevent duplicate enqueues
         static $enqueued = false;
         
         if ($enqueued) {
@@ -289,7 +255,7 @@ class AI_Verify {
             ));
         }
         
-        // NEW: Enqueue fact-check CSS and JS on results pages
+        // Enqueue fact-check CSS and JS
         if (file_exists(AI_VERIFY_PLUGIN_DIR . 'assets/css/factcheck.css')) {
             wp_enqueue_style(
                 'ai-verify-factcheck',
@@ -311,7 +277,6 @@ class AI_Verify {
             // Localize with fact-check specific data
             $results_url = get_option('ai_verify_results_page_url', '');
             
-            // *** THE FIX IS HERE: We force an absolute URL for admin-ajax.php ***
             wp_localize_script('ai-verify-factcheck', 'aiVerifyFactcheck', array(
                 'ajax_url' => admin_url('admin-ajax.php', 'https'),
                 'nonce' => wp_create_nonce('ai_verify_factcheck_nonce'),
@@ -334,7 +299,7 @@ class AI_Verify {
             AI_VERIFY_VERSION
         );
 
-        // NEW: Enqueue assets for our dedicated assistant page
+        // Enqueue assets for dedicated assistant page
         if ('toplevel_page_ai-verify-assistant' === $hook) {
             wp_enqueue_style(
                 'ai-verify-assistant-page',
@@ -351,7 +316,6 @@ class AI_Verify {
                 true
             );
 
-            // Localize script data, including the new nonce
             wp_localize_script('ai-verify-assistant-page', 'aiVerifyDashboard', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'assistant_nonce' => wp_create_nonce('ai_verify_assistant_nonce')
@@ -419,7 +383,7 @@ function ai_verify_init() {
 }
 add_action('plugins_loaded', 'ai_verify_init');
 
-// Activation hook - UPDATED
+// Activation hook - UPDATED FOR REPORT POST TYPE
 register_activation_hook(__FILE__, function() {
     // Set default options
     add_option('ai_verify_auto_add', 'no');
@@ -439,24 +403,41 @@ register_activation_hook(__FILE__, function() {
         array('text' => '🛡️ All Tools', 'url' => 'https://disinformationcommission.com')
     )));
     
-    // NEW: Create database tables for access tracking
+    // Create database tables for access tracking
     if (class_exists('AI_Verify_Factcheck_Ajax')) {
         AI_Verify_Factcheck_Ajax::init();
     }
     
+    // Create fact-check report tables
     if (class_exists('AI_Verify_Factcheck_Database')) {
         AI_Verify_Factcheck_Database::create_tables();
     }
+    
+    // NEW: Register the Reports custom post type (must be done before flushing rewrite rules)
+    if (class_exists('AI_Verify_Factcheck_Post_Generator')) {
+        AI_Verify_Factcheck_Post_Generator::register_post_type();
+    }
 
-    // NEW: Upgrade database for Intelligence Dashboard
+    // Upgrade database for Intelligence Dashboard
     if (class_exists('AI_Verify_Trends_Database_Upgrade')) {
         AI_Verify_Trends_Database_Upgrade::upgrade_to_v2();
     }
     
-    // NEW: Create initial velocity snapshots
+    // Create initial velocity snapshots
     if (class_exists('AI_Verify_Velocity_Tracker')) {
         wp_schedule_single_event(time() + 60, 'ai_verify_calculate_velocity');
     }
     
-    error_log('AI Verify: Intelligence Dashboard activated');
+    // NEW: Flush rewrite rules to register the custom post type URLs
+    flush_rewrite_rules();
+    
+    error_log('AI Verify: Plugin activated with Reports custom post type');
+});
+
+// Deactivation hook - NEW
+register_deactivation_hook(__FILE__, function() {
+    // Flush rewrite rules on deactivation
+    flush_rewrite_rules();
+    
+    error_log('AI Verify: Plugin deactivated');
 });

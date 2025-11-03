@@ -1,6 +1,7 @@
 <?php
 /**
  * Database Operations for Fact-Check System
+ * UPDATED: Now creates WordPress posts for completed reports
  */
 
 if (!defined('ABSPATH')) {
@@ -163,7 +164,7 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * Save fact-check results (UPDATED - NOW SAVES PROPAGANDA)
+     * Save fact-check results (UPDATED - NOW CREATES WORDPRESS POSTS)
      */
     public static function save_results($report_id, $results, $overall_score, $rating, $sources = array(), $propaganda = array()) {
         global $wpdb;
@@ -174,9 +175,7 @@ class AI_Verify_Factcheck_Database {
         $metadata = array();
         if (!empty($propaganda) && is_array($propaganda)) {
             $metadata['propaganda_techniques'] = $propaganda;
-            error_log("AI Verify: Saving " . count($propaganda) . " propaganda techniques: " . json_encode($propaganda));
-        } else {
-            error_log("AI Verify: No propaganda techniques to save");
+            error_log("AI Verify: Saving " . count($propaganda) . " propaganda techniques");
         }
         
         $update_data = array(
@@ -205,6 +204,19 @@ class AI_Verify_Factcheck_Database {
         }
         
         error_log("AI Verify: Successfully saved results for {$report_id}");
+        
+        // Get the complete report data
+        $report_data = self::get_report($report_id);
+        
+        // Create WordPress post for the report (makes it publicly accessible and SEO-friendly)
+        if (class_exists('AI_Verify_Factcheck_Post_Generator') && !empty($report_data)) {
+            $post_id = AI_Verify_Factcheck_Post_Generator::create_report_post($report_id, $report_data);
+            if ($post_id) {
+                error_log("AI Verify: Created WordPress post {$post_id} for report {$report_id}");
+            } else {
+                error_log("AI Verify: Failed to create WordPress post for report {$report_id}");
+            }
+        }
         
         return true;
     }
