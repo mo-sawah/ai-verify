@@ -1,0 +1,482 @@
+<?php
+/**
+ * Web Scraper Engine - IMPROVED with auto-fallback and Daily Mail filtering
+ * Uses ScraperAPI (fast, reliable) or Firecrawl with adaptive filtering
+ * IMPROVEMENTS:
+ * - Automatic fallback to Jina if ScraperAPI/Firecrawl fails
+ * - Special Daily Mail content filtering (removes recommended articles)
+ * - Better error handling and logging
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class AI_Verify_Factcheck_Scraper {
+    
+    public static function scrape_url($url) {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return new WP_Error('invalid_url', 'Invalid URL provided');
+        }
+
+        $service = get_option('ai_verify_scraping_service', 'jina');
+        
+        // Priority: ScraperAPI > Firecrawl > Jina with automatic fallback
+        if ($service === 'scraperapi' && get_option('ai_verify_scraperapi_key')) {
+            $result = self::scrape_with_scraperapi($url);
+            // If ScraperAPI fails, fallback to Jina
+            if (is_wp_error($result)) {
+                error_log('AI Verify: ScraperAPI failed (' . $result->get_error_message() . '), falling back to Jina');
+                $result = self::scrape_with_jina($url);
+            }
+        } elseif ($service === 'firecrawl' && get_option('ai_verify_firecrawl_key')) {
+            $result = self::scrape_with_firecrawl($url);
+            // If Firecrawl fails, fallback to Jina
+            if (is_wp_error($result)) {
+                error_log('AI Verify: Firecrawl failed (' . $result->get_error_message() . '), falling back to Jina');
+                $result = self::scrape_with_jina($url);
+            }
+        } else {
+            $result = self::scrape_with_jina($url);
+        }
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return self::parse_content($result['content'], $result['title'], $url);
+    }
+
+    /**
+     * SCRAPERAPI: Fast, reliable, handles JavaScript
+     */
+    private static function scrape_with_scraperapi($url) {
+        $api_key = get_option('ai_verify_scraperapi_key');
+        if (empty($api_key)) {
+            return new WP_Error('scraperapi_error', 'ScraperAPI key not configured.');
+        }
+
+        error_log('AI Verify: Using ScraperAPI for: ' . $url);
+        
+        // ScraperAPI endpoint with render=true for JavaScript sites
+        $scraper_url = add_query_arg(array(
+            'api_key' => $api_key,
+            'url' => $url,
+            'render' => 'true', // Render JavaScript
+            'country_code' => 'us'
+        ), 'https://api.scraperapi.com/');
+        
+        $response = wp_remote_get($scraper_url, array(
+            'timeout' => 60,
+            'sslverify' => true
+        ));
+        
+        if (is_wp_error($response)) {
+            error_log('AI Verify: ScraperAPI error: ' . $response->get_error_message());
+            return $response;
+        }
+        
+        $status = wp_remote_retrieve_response_code($response);
+        if ($status !== 200) {
+            error_log('AI Verify: ScraperAPI returned status ' . $status);
+            return new WP_Error('scraperapi_error', 'ScraperAPI returned status: ' . $status);
+        }
+        
+        $html = wp_remote_retrieve_body($response);
+        
+        if (empty($html)) {
+            return new WP_Error('scraperapi_error', 'ScraperAPI returned empty content');
+        }
+        
+        // Convert HTML to clean markdown
+        $markdown = self::html_to_markdown($html);
+        $title = self::extract_title_from_html($html);
+        
+        // Apply smart filtering (includes Daily Mail specific filtering)
+        $markdown = self::smart_filter($markdown, $url);
+        
+        error_log('AI Verify: ScraperAPI success - extracted ' . strlen($markdown) . ' chars');
+        
+        return array(
+            'title' => $title,
+            'content' => $markdown
+        );
+    }
+
+    /**
+     * Convert HTML to clean markdown (fast and simple)
+     */
+    private static function html_to_markdown($html) {
+        // Remove script and style tags
+        $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
+        $html = preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $html);
+        $html = preg_replace('/<noscript\b[^>]*>.*?<\/noscript>/is', '', $html);
+        
+        // Remove navigation, footer, sidebar, ads
+        $html = preg_replace('/<nav\b[^>]*>.*?<\/nav>/is', '', $html);
+        $html = preg_replace('/<footer\b[^>]*>.*?<\/footer>/is', '', $html);
+        $html = preg_replace('/<aside\b[^>]*>.*?<\/aside>/is', '', $html);
+        $html = preg_replace('/<div[^>]*class="[^"]*(?:ad|advertisement|sidebar|related|trending)[^"]*"[^>]*>.*?<\/div>/is', '', $html);
+        
+        // Extract main content area (article, main, or div with role="main")
+        if (preg_match('/<(?:article|main)[^>]*>(.*?)<\/(?:article|main)>/is', $html, $match)) {
+            $html = $match[1];
+        } elseif (preg_match('/<div[^>]*role="main"[^>]*>(.*?)<\/div>/is', $html, $match)) {
+            $html = $match[1];
+        }
+        
+        // Convert common elements to markdown
+        $html = preg_replace('/<h1[^>]*>(.*?)<\/h1>/is', "\n# $1\n", $html);
+        $html = preg_replace('/<h2[^>]*>(.*?)<\/h2>/is', "\n## $1\n", $html);
+        $html = preg_replace('/<h3[^>]*>(.*?)<\/h3>/is', "\n### $1\n", $html);
+        $html = preg_replace('/<p[^>]*>(.*?)<\/p>/is', "\n$1\n", $html);
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $html = preg_replace('/<strong[^>]*>(.*?)<\/strong>/is', "**$1**", $html);
+        $html = preg_replace('/<em[^>]*>(.*?)<\/em>/is', "*$1*", $html);
+        
+        // Remove all remaining HTML tags
+        $html = strip_tags($html);
+        
+        // Clean up whitespace
+        $html = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $html = preg_replace('/\n{3,}/', "\n\n", $html);
+        
+        return trim($html);
+    }
+    
+    /**
+     * Extract title from HTML
+     */
+    private static function extract_title_from_html($html) {
+        if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $match)) {
+            $title = strip_tags($match[1]);
+            $title = html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return trim($title);
+        }
+        
+        if (preg_match('/<h1[^>]*>(.*?)<\/h1>/is', $html, $match)) {
+            $title = strip_tags($match[1]);
+            $title = html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return trim($title);
+        }
+        
+        return 'Untitled';
+    }
+
+    /**
+     * Firecrawl (keep as backup option)
+     */
+    private static function scrape_with_firecrawl($url) {
+        $api_key = get_option('ai_verify_firecrawl_key');
+        if (empty($api_key)) {
+            return new WP_Error('firecrawl_error', 'Firecrawl API key not configured.');
+        }
+
+        error_log('AI Verify: Using Firecrawl for: ' . $url);
+
+        $api_url = 'https://api.firecrawl.dev/v0/scrape';
+        
+        $response = wp_remote_post($api_url, array(
+            'method'  => 'POST',
+            'timeout' => 120,
+            'headers' => array(
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ),
+            'body'    => json_encode(array(
+                'url' => $url,
+                'pageOptions' => array(
+                    'onlyMainContent' => true
+                )
+            )),
+        ));
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $response_code = wp_remote_retrieve_response_code($response);
+
+        if ($response_code !== 200 || empty($body['data']['markdown'])) {
+            $error_message = isset($body['error']) ? $body['error'] : 'Firecrawl failed';
+            return new WP_Error('firecrawl_error', $error_message);
+        }
+
+        $content = $body['data']['markdown'];
+        $content = self::smart_filter($content, $url);
+
+        return array(
+            'title'   => $body['data']['metadata']['title'] ?? 'Untitled',
+            'content' => $content
+        );
+    }
+    
+    /**
+     * Jina Reader (free fallback)
+     */
+    private static function scrape_with_jina($url) {
+        error_log('AI Verify: Using Jina Reader for: ' . $url);
+        
+        $jina_url = 'https://r.jina.ai/' . $url;
+        
+        $response = wp_remote_get($jina_url, array(
+            'timeout' => 30,
+            'headers' => array('X-With-Generated-Alt' => 'true')
+        ));
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $status = wp_remote_retrieve_response_code($response);
+        
+        if ($status !== 200 || empty($body)) {
+            return new WP_Error('scrape_failed', 'Jina Reader failed. Status: ' . $status);
+        }
+        
+        preg_match('/^# (.+)$/m', $body, $title_match);
+        $title = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($url);
+
+        $body = self::smart_filter($body, $url);
+
+        return array(
+            'title' => $title,
+            'content' => $body
+        );
+    }
+    
+    /**
+     * SMART FILTER: Fast and effective for all sites with Daily Mail special handling
+     */
+    private static function smart_filter($markdown, $url) {
+        $lines = explode("\n", $markdown);
+        $filtered_lines = array();
+        $article_started = false;
+        $skip_until_article = true;
+        $skip_section = false;
+        
+        // Quick detection: Is this Daily Mail or similar messy site?
+        $domain = parse_url($url, PHP_URL_HOST);
+        $is_daily_mail = preg_match('/dailymail\.co\.uk/i', $domain);
+        $is_messy_site = preg_match('/(dailymail|nypost|thesun|mirror)\./', $domain);
+        
+        // For Daily Mail - find the first H1 heading (real article starts there)
+        if ($is_daily_mail) {
+            $found_h1 = false;
+            foreach ($lines as $index => $line) {
+                $line_trimmed = trim($line);
+                
+                // Look for first H1 heading (article title)
+                if (!$found_h1 && preg_match('/^#\s+[A-Z]/i', $line_trimmed) && strlen($line_trimmed) > 20) {
+                    $found_h1 = true;
+                    $article_started = true;
+                    $skip_until_article = false;
+                    $filtered_lines[] = $line;
+                    continue;
+                }
+                
+                // Once H1 found, process normally
+                if ($found_h1) {
+                    // Skip obvious Daily Mail sidebar/recommended junk
+                    if (preg_match('/^(TRENDING|Related|Most Read|Recommended|Share this|SHARE SELECTION|Video Quality)/i', $line_trimmed)) {
+                        $skip_section = true;
+                        continue;
+                    }
+                    
+                    // Skip short lines that look like UI elements
+                    if ($skip_section && strlen($line_trimmed) < 80) {
+                        continue;
+                    }
+                    
+                    // Resume if we see proper article content
+                    if ($skip_section && strlen($line_trimmed) > 120 && preg_match('/[.!?]/', $line_trimmed)) {
+                        $skip_section = false;
+                    }
+                    
+                    // Skip all image captions with viewing numbers
+                    if (preg_match('/\d+\.?\d*k?\s*viewing\s*now/i', $line_trimmed)) {
+                        continue;
+                    }
+                    
+                    // Keep good content
+                    if (!$skip_section && !empty($line_trimmed)) {
+                        $filtered_lines[] = $line;
+                    }
+                }
+            }
+        } else {
+            // Original filtering for other sites
+            foreach ($lines as $line) {
+                $line_trimmed = trim($line);
+                
+                // Skip empty lines at start
+                if (!$article_started && empty($line_trimmed)) {
+                    continue;
+                }
+                
+                // For messy sites, skip until we find article content
+                if ($is_messy_site && $skip_until_article) {
+                    // Look for first substantial paragraph (150+ chars with article words)
+                    if (strlen($line_trimmed) > 150 && 
+                        preg_match('/\b(the|a|an|said|told|was|were|has|have)\b/i', $line_trimmed) &&
+                        preg_match('/[.!?]/', $line_trimmed)) {
+                        $skip_until_article = false;
+                        $article_started = true;
+                        $filtered_lines[] = $line;
+                        continue;
+                    }
+                    continue;
+                }
+                
+                // Article found, now filter inline junk
+                if (!$article_started && strlen($line_trimmed) > 80) {
+                    $article_started = true;
+                }
+                
+                if (!$article_started) {
+                    continue;
+                }
+                
+                // Detect section headers to skip
+                if (preg_match('/^(TRENDING|Related|More Stories|Popular|Recommended|Latest|Breaking News)$/i', $line_trimmed)) {
+                    $skip_section = true;
+                    continue;
+                }
+                
+                // In skip section
+                if ($skip_section) {
+                    // Check for "viewing now" or very short lines
+                    if (preg_match('/\d+\.?\d*k?\s*(viewing|views)/i', $line_trimmed) || strlen($line_trimmed) < 60) {
+                        continue;
+                    }
+                    
+                    // Check if article resumed (long line with proper text)
+                    if (strlen($line_trimmed) > 120 && preg_match('/[.!?]/', $line_trimmed)) {
+                        $skip_section = false;
+                        $filtered_lines[] = $line;
+                        continue;
+                    }
+                    continue;
+                }
+                
+                // Skip obvious UI elements
+                if (preg_match('/^(Share|Follow|Subscribe|Play|Pause|View gallery|Loading|Top|Home|\d+p|[0-9]{1,2}:[0-9]{2})$/i', $line_trimmed)) {
+                    continue;
+                }
+                
+                // Keep good content
+                if (!empty($line_trimmed) || $article_started) {
+                    $filtered_lines[] = $line;
+                }
+            }
+        }
+        
+        $filtered = implode("\n", $filtered_lines);
+        $filtered = preg_replace('/\n{3,}/', "\n\n", $filtered);
+        
+        return trim($filtered);
+    }
+    
+    private static function parse_content($markdown, $title, $original_url) {
+        $author = self::extract_author($markdown);
+        $date = self::extract_date($markdown);
+        $content = self::clean_markdown($markdown);
+        $paragraphs = self::extract_paragraphs($content);
+        $word_count = str_word_count(strip_tags($content));
+        
+        error_log("AI Verify: Final - {$word_count} words, " . count($paragraphs) . " paragraphs");
+        
+        return array(
+            'success' => true,
+            'title' => $title,
+            'content' => $content,
+            'paragraphs' => $paragraphs,
+            'author' => $author,
+            'date' => $date,
+            'word_count' => $word_count,
+            'url' => $original_url,
+            'scraped_at' => current_time('mysql')
+        );
+    }
+    
+    private static function extract_title_from_url($url) {
+        $parts = parse_url($url);
+        $path = isset($parts['path']) ? $parts['path'] : '';
+        $title = basename($path);
+        $title = str_replace(array('-', '_'), ' ', $title);
+        return ucwords($title);
+    }
+    
+    private static function extract_author($markdown) {
+        $patterns = array('/By ([A-Z][a-z]+ [A-Z][a-z]+)/i', '/Author: ([A-Z][a-z]+ [A-Z][a-z]+)/i');
+        foreach ($patterns as $pattern) { 
+            if (preg_match($pattern, $markdown, $match)) { 
+                return trim($match[1]); 
+            } 
+        }
+        return null;
+    }
+    
+    private static function extract_date($markdown) {
+        $patterns = array('/Published: (\d{4}-\d{2}-\d{2})/', '/(\d{1,2}\/\d{1,2}\/\d{4})/', '/(\w+ \d{1,2}, \d{4})/');
+        foreach ($patterns as $pattern) { 
+            if (preg_match($pattern, $markdown, $match)) { 
+                return trim($match[1]); 
+            } 
+        }
+        return null;
+    }
+    
+    private static function clean_markdown($markdown) {
+        $markdown = preg_replace('/\[.*?\]\(.*?\)/s', '', $markdown);
+        $markdown = preg_replace('/\n{3,}/', "\n\n", $markdown);
+        return trim($markdown);
+    }
+    
+    private static function extract_paragraphs($content) {
+        $parts = explode("\n\n", $content);
+        $paragraphs = array();
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if (strlen($part) > 100 && !preg_match('/^#+/', $part)) {
+                $paragraphs[] = $part;
+            }
+        }
+        return $paragraphs;
+    }
+    
+    public static function search_phrase($phrase) {
+        $api_key = get_option('ai_verify_google_factcheck_key');
+        if (!empty($api_key)) {
+            $factchecks = self::search_google_factcheck($phrase, $api_key);
+            if (!empty($factchecks)) {
+                return array('success' => true, 'source' => 'google_factcheck', 'results' => $factchecks, 'phrase' => $phrase);
+            }
+        }
+        return array('success' => true, 'source' => 'web_search', 'phrase' => $phrase, 'requires_ai' => true);
+    }
+    
+    private static function search_google_factcheck($query, $api_key) {
+        $url = add_query_arg(array('key' => $api_key, 'query' => urlencode($query), 'languageCode' => 'en', 'pageSize' => 10), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
+        $response = wp_remote_get($url, array('timeout' => 15));
+        if (is_wp_error($response)) { return array(); }
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $factchecks = array();
+        if (isset($body['claims']) && is_array($body['claims'])) {
+            foreach ($body['claims'] as $claim) {
+                if (!isset($claim['claimReview'][0])) { continue; }
+                $review = $claim['claimReview'][0];
+                $factchecks[] = array(
+                    'claim' => isset($claim['text']) ? $claim['text'] : '',
+                    'rating' => isset($review['textualRating']) ? $review['textualRating'] : '',
+                    'source' => isset($review['publisher']['name']) ? $review['publisher']['name'] : '',
+                    'url' => isset($review['url']) ? $review['url'] : '',
+                    'date' => isset($review['reviewDate']) ? $review['reviewDate'] : ''
+                );
+            }
+        }
+        return $factchecks;
+    }
+}

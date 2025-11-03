@@ -1,0 +1,358 @@
+/**
+ * Misinformation Tracker Widget Styles
+ */
+
+/* Container */
+.misinfo-widget-container {
+  margin: 20px 0;
+}
+
+.misinfo-widget-container.full {
+  max-width: 800px;
+  margin: 40px auto;
+}
+
+/* Widget Base */
+.misinfo-widget {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+}
+
+.s-dark .misinfo-widget {
+  background: #2d3748;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Header */
+.misinfo-widget .widget-header {
+  background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+  color: white;
+  padding: 20px;
+  text-align: center;
+}
+
+.misinfo-widget .widget-header h3 {
+  font-size: 18px;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.misinfo-widget .header-icon {
+  width: 22px;
+  height: 22px;
+  color: #ff4444;
+  flex-shrink: 0;
+}
+
+.misinfo-widget .live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.misinfo-widget .live-dot {
+  width: 8px;
+  height: 8px;
+  background: #ff4444;
+  border-radius: 50%;
+  animation: misfoPulse 2s infinite;
+}
+
+@keyframes misfoPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Filter */
+.misinfo-widget .widget-filter {
+  padding: 15px;
+  border-bottom: 1px solid #e5e5e5;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.s-dark .misinfo-widget .widget-filter {
+  border-bottom-color: #4a5568;
+}
+
+.misinfo-widget .filter-badge {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  user-select: none;
+}
+
+.misinfo-widget .filter-badge.all {
+  background: #e2e8f0;
+  color: #2d3748;
+}
+
+.misinfo-widget .filter-badge.false {
+  background: #fee;
+  color: #c53030;
+}
+
+.misinfo-widget .filter-badge.misleading {
+  background: #fff9e6;
+  color: #744210;
+}
+
+.misinfo-widget .filter-badge.active {
+  border-color: #acd2bf;
+  transform: scale(1.05);
+}
+
+.misinfo-widget .filter-badge:hover {
+  transform: scale(1.05);
+}
+
+.s-dark .misinfo-widget .filter-badge.all {
+  background: #4a5568;
+  color: #e2e8f0;
+}
+
+.s-dark .misinfo-widget .filter-badge.false {
+  background: rgba(245, 101, 101, 0.2);
+  color: #fc8181;
+}
+
+.s-dark .misinfo-widget .filter-badge.misleading {
+  background: rgba(237, 137, 54, 0.2);
+  color: #fbd38d;
+}
+
+/* Content */
+.misinfo-widget .widget-content {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.misinfo-widget-container.full .widget-content {
+  max-height: 700px;
+}
+
+/* Loading */
+.misinfo-widget .misinfo-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: #718096;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.s-dark .misinfo-widget .misinfo-loading {
+  color: #a0aec0;
+}
+
+.misinfo-widget .spin {
+  animation: misfoSpin 1s linear infinite;
+}
+
+@keyframes misfoSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Items */
+.misinfo-widget .misinfo-item {
+  padding: 16px;
+  border-bottom: 1px solid #e5e5e5;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.misinfo-widget .misinfo-item:hover {
+  background: #f7fafc;
+}
+
+.misinfo-widget .misinfo-item:last-child {
+  border-bottom: none;
+}
+
+.misinfo-widget .misinfo-item.hidden {
+  display: none;
+}
+
+.s-dark .misinfo-widget .misinfo-item {
+  border-bottom-color: #4a5568;
+}
+
+.s-dark .misinfo-widget .misinfo-item:hover {
+  background: #1a202c;
+}
+
+.misinfo-widget .item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.misinfo-widget .item-rating {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.misinfo-widget .rating-false {
+  background: #fee;
+  color: #c53030;
+}
+
+.misinfo-widget .rating-misleading,
+.misinfo-widget .rating-mixture {
+  background: #fff9e6;
+  color: #744210;
+}
+
+.s-dark .misinfo-widget .rating-false {
+  background: rgba(245, 101, 101, 0.2);
+  color: #fc8181;
+}
+
+.s-dark .misinfo-widget .rating-misleading,
+.s-dark .misinfo-widget .rating-mixture {
+  background: rgba(237, 137, 54, 0.2);
+  color: #fbd38d;
+}
+
+.misinfo-widget .item-claim {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.s-dark .misinfo-widget .item-claim {
+  color: #e2e8f0;
+}
+
+.misinfo-widget .item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #718096;
+  flex-wrap: wrap;
+}
+
+.s-dark .misinfo-widget .item-meta {
+  color: #a0aec0;
+}
+
+.misinfo-widget .item-source,
+.misinfo-widget .item-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.misinfo-widget .item-meta svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Footer */
+.misinfo-widget .widget-footer {
+  padding: 16px;
+  text-align: center;
+  border-top: 1px solid #e5e5e5;
+}
+
+.s-dark .misinfo-widget .widget-footer {
+  border-top-color: #4a5568;
+}
+
+.misinfo-widget .view-all-btn {
+  display: inline-block;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #acd2bf 0%, #8fc4a8 100%);
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.misinfo-widget .view-all-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(172, 210, 191, 0.4);
+}
+
+/* Empty State */
+.misinfo-widget .misinfo-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #718096;
+}
+
+.s-dark .misinfo-widget .misinfo-empty {
+  color: #a0aec0;
+}
+
+/* Scrollbar */
+.misinfo-widget .widget-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.misinfo-widget .widget-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.misinfo-widget .widget-content::-webkit-scrollbar-thumb {
+  background: #acd2bf;
+  border-radius: 4px;
+}
+
+.s-dark .misinfo-widget .widget-content::-webkit-scrollbar-track {
+  background: #1a202c;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .misinfo-widget .widget-header h3 {
+    font-size: 16px;
+  }
+
+  .misinfo-widget .item-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
