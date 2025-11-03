@@ -10,11 +10,19 @@ if (!defined('ABSPATH')) {
 
 get_header();
 
-// Get report ID from URL
-$report_id = isset($_GET['report']) ? sanitize_text_field($_GET['report']) : '';
+// Get report ID from URL or post meta
+$report_id = '';
+
+if (isset($_GET['report'])) {
+    // Dedicated processing page with ?report=xxx
+    $report_id = sanitize_text_field($_GET['report']);
+} elseif (isset($post) && $post->post_type === 'fact_check_report') {
+    // Report post with ?processing=1
+    $report_id = get_post_meta($post->ID, 'report_id', true);
+}
 
 if (empty($report_id)) {
-    echo '<p>Invalid report ID</p>';
+    echo '<div style="padding: 40px; text-align: center;"><p>Invalid report ID</p></div>';
     get_footer();
     exit;
 }
@@ -23,7 +31,7 @@ if (empty($report_id)) {
 $report = AI_Verify_Factcheck_Database::get_report($report_id);
 
 if (!$report) {
-    echo '<p>Report not found</p>';
+    echo '<div style="padding: 40px; text-align: center;"><p>Report not found. It may have been deleted.</p></div>';
     get_footer();
     exit;
 }

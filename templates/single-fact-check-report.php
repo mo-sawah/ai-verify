@@ -20,6 +20,22 @@ if (empty($report_data)) {
     $report_data = AI_Verify_Factcheck_Database::get_report($report_id);
 }
 
+// Check if report is still processing
+if (!empty($report_data) && in_array($report_data['status'], array('pending', 'processing'))) {
+    // Show processing page instead
+    include AI_VERIFY_PLUGIN_DIR . 'templates/factcheck-processing.php';
+    get_footer();
+    return;
+}
+
+// Check for processing parameter in URL
+if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_data) && $report_data['status'] !== 'completed') {
+    // Show processing page
+    include AI_VERIFY_PLUGIN_DIR . 'templates/factcheck-processing.php';
+    get_footer();
+    return;
+}
+
 ?>
 
 <div class="ai-verify-report-wrapper">

@@ -199,7 +199,7 @@ let currentReportId = null;
       },
       success: function (response) {
         if (response.success) {
-          // Use the report URL from the server response instead of constructing it
+          // Use the report URL from server response
           window.location.href = response.data.report_url;
         } else {
           alert(response.data.message || "Failed to start fact-check");

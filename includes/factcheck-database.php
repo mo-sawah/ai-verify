@@ -21,7 +21,7 @@ class AI_Verify_Factcheck_Database {
         $table_name = $wpdb->prefix . self::$table_name;
         $charset_collate = $wpdb->get_charset_collate();
         
-        $sql = "CREATE TABLE $table_name (
+        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             report_id varchar(64) NOT NULL,
             input_type varchar(20) NOT NULL,
@@ -53,6 +53,33 @@ class AI_Verify_Factcheck_Database {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+        
+        // Add progress columns if they don't exist (for existing installations)
+        $columns_to_add = array(
+            'progress' => "INT(3) DEFAULT 0 AFTER status",
+            'progress_message' => "TEXT DEFAULT NULL AFTER progress",
+            'current_claim' => "TEXT DEFAULT NULL AFTER progress_message",
+            'claim_number' => "INT DEFAULT 0 AFTER current_claim"
+        );
+        
+        foreach ($columns_to_add as $column => $definition) {
+            $column_exists = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = %s 
+                    AND TABLE_NAME = %s 
+                    AND COLUMN_NAME = %s",
+                    DB_NAME,
+                    $table_name,
+                    $column
+                )
+            );
+            
+            if (empty($column_exists)) {
+                $wpdb->query("ALTER TABLE $table_name ADD COLUMN $column $definition");
+                error_log("AI Verify: Added column '$column' to database");
+            }
+        }
     }
     
     /**
