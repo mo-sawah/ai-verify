@@ -139,16 +139,44 @@ class AI_Verify_Factcheck_Post_Generator {
      * Generate title for the report post
      */
     private static function generate_title($report_data) {
-        $rating = $report_data['credibility_rating'] ?? 'Unknown';
         $input = $report_data['input_value'] ?? '';
         
         if ($report_data['input_type'] === 'url') {
-            // Try to extract domain
+            // Try to get the actual article title from scraped content
+            $article_title = '';
+            
+            // First check if we have scraped metadata
+            if (!empty($report_data['scraped_content'])) {
+                // Try to extract from HTML title tag
+                if (preg_match('/<title>(.*?)<\/title>/i', $report_data['scraped_content'], $match)) {
+                    $article_title = html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8');
+                }
+                // Or try to extract from first h1
+                if (empty($article_title) && preg_match('/<h1[^>]*>(.*?)<\/h1>/i', $report_data['scraped_content'], $match)) {
+                    $article_title = html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8');
+                }
+            }
+            
+            // Clean up title - remove site names and separators
+            if (!empty($article_title)) {
+                // Remove common patterns like " - SiteName" or " | SiteName" from the end
+                $article_title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $article_title);
+                $article_title = trim($article_title);
+                
+                // Limit length
+                if (mb_strlen($article_title) > 80) {
+                    $article_title = mb_substr($article_title, 0, 77) . '...';
+                }
+                
+                return "Fact-Check: {$article_title}";
+            }
+            
+            // Fallback to domain if no title found
             $parsed = parse_url($input);
             $domain = $parsed['host'] ?? 'Unknown Source';
             $domain = str_replace('www.', '', $domain);
             
-            return "Fact-Check: {$domain} Article - {$rating}";
+            return "Fact-Check: {$domain} Article";
         } else {
             // For title or phrase input
             $short_input = mb_substr($input, 0, 60);

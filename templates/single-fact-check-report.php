@@ -41,14 +41,106 @@ if (empty($report_data)) {
                             </svg>
                             Print Report
                         </button>
-                        <button class="share-btn" onclick="navigator.clipboard.writeText(window.location.href).then(() => alert('Link copied!'))">
+                        
+                        <div class="share-dropdown-wrapper">
+                            <button class="share-btn" onclick="toggleShareMenu(event)">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                                </svg>
+                                Share
+                            </button>
+                            <div class="share-menu" style="display: none;">
+                                <a href="#" onclick="copyReportLink(event)" class="share-option">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                    Copy Link
+                                </a>
+                                <a href="#" onclick="shareTwitter(event)" class="share-option">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg>
+                                    Share on X
+                                </a>
+                                <a href="#" onclick="shareFacebook(event)" class="share-option">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                    Share on Facebook
+                                </a>
+                                <a href="#" onclick="shareLinkedIn(event)" class="share-option">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                                    Share on LinkedIn
+                                </a>
+                                <a href="#" onclick="shareEmail(event)" class="share-option">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                    Share via Email
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <button class="recheck-btn" onclick="recheckReport()">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                             </svg>
-                            Share
+                            Re-check
                         </button>
                     </div>
                 </div>
+                
+                <script>
+                function toggleShareMenu(e) {
+                    e.preventDefault();
+                    const menu = document.querySelector('.share-menu');
+                    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+                }
+                
+                function copyReportLink(e) {
+                    e.preventDefault();
+                    navigator.clipboard.writeText(window.location.href).then(() => {
+                        alert('Link copied to clipboard!');
+                        document.querySelector('.share-menu').style.display = 'none';
+                    });
+                }
+                
+                function shareTwitter(e) {
+                    e.preventDefault();
+                    const url = encodeURIComponent(window.location.href);
+                    const text = encodeURIComponent('Check out this fact-check report:');
+                    window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, '_blank', 'width=600,height=400');
+                }
+                
+                function shareFacebook(e) {
+                    e.preventDefault();
+                    const url = encodeURIComponent(window.location.href);
+                    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=400');
+                }
+                
+                function shareLinkedIn(e) {
+                    e.preventDefault();
+                    const url = encodeURIComponent(window.location.href);
+                    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, '_blank', 'width=600,height=400');
+                }
+                
+                function shareEmail(e) {
+                    e.preventDefault();
+                    const url = encodeURIComponent(window.location.href);
+                    const subject = encodeURIComponent('Fact-Check Report');
+                    const body = encodeURIComponent(`I thought you might find this fact-check report interesting:\n\n${window.location.href}`);
+                    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                }
+                
+                function recheckReport() {
+                    if (confirm('This will create a new analysis of the same content. Continue?')) {
+                        const reportData = window.aiVerifyReportData;
+                        if (reportData && reportData.input_value) {
+                            window.location.href = '<?php echo home_url('/fact-check/'); ?>?recheck=' + encodeURIComponent(reportData.input_value);
+                        }
+                    }
+                }
+                
+                // Close share menu when clicking outside
+                document.addEventListener('click', function(e) {
+                    if (!e.target.closest('.share-dropdown-wrapper')) {
+                        const menu = document.querySelector('.share-menu');
+                        if (menu) menu.style.display = 'none';
+                    }
+                });
+                </script>
                 
                 <?php if ($report_data['input_type'] === 'url' && !empty($report_data['input_value'])): 
                     $url = $report_data['input_value'];
@@ -56,12 +148,17 @@ if (empty($report_data)) {
                     $domain = isset($parsed['host']) ? str_replace('www.', '', $parsed['host']) : '';
                     $favicon_url = "https://www.google.com/s2/favicons?domain={$domain}&sz=32";
                     
-                    // Extract title from scraped content
-                    $title = $url;
-                    if (!empty($report_data['scraped_content'])) {
-                        if (preg_match('/<title>(.*?)<\/title>/i', $report_data['scraped_content'], $match)) {
-                            $title = html_entity_decode($match[1], ENT_QUOTES, 'UTF-8');
-                        }
+                    // Get metadata from database (stored separately now)
+                    $metadata = $report_data['metadata'] ?? array();
+                    $title = $metadata['title'] ?? $url;
+                    $author = $metadata['author'] ?? '';
+                    $date = $metadata['date'] ?? '';
+                    $excerpt = $metadata['excerpt'] ?? '';
+                    
+                    // Clean up title - remove site names
+                    if ($title !== $url) {
+                        $title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $title);
+                        $title = trim($title);
                     }
                     
                     // Get featured image
@@ -93,13 +190,20 @@ if (empty($report_data)) {
                                 <a href="<?php echo esc_url($url); ?>" class="source-title-link" target="_blank" rel="noopener noreferrer">
                                     <h4 class="source-title"><?php echo esc_html($title); ?></h4>
                                 </a>
+                                <?php if (!empty($excerpt)): ?>
+                                <p class="source-excerpt"><?php echo esc_html($excerpt); ?></p>
+                                <?php endif; ?>
                                 <div class="source-meta">
                                     <span class="source-favicon-inline">
                                         <img src="<?php echo esc_url($favicon_url); ?>" alt="<?php echo esc_attr($domain); ?>" onerror="this.style.display='none'">
                                     </span>
                                     <span class="source-domain"><?php echo esc_html($domain); ?></span>
+                                    <?php if (!empty($author)): ?>
                                     <span class="source-separator">•</span>
-                                    <span class="source-date"><?php echo esc_html(get_the_date('M j, Y')); ?></span>
+                                    <span class="source-author"><?php echo esc_html($author); ?></span>
+                                    <?php endif; ?>
+                                    <span class="source-separator">•</span>
+                                    <span class="source-date"><?php echo esc_html($date ?: get_the_date('M j, Y')); ?></span>
                                 </div>
                             </div>
                         </div>
@@ -257,11 +361,109 @@ if (empty($report_data)) {
                 </div>
                 <?php endif; ?>
                 
-                <!-- Rest of the report template would continue here with claims, sources, etc. -->
-                <!-- For brevity, using the shortcode renderer -->
-                <div class="report-content-body">
-                    <?php the_content(); ?>
+                <!-- Claims Analysis Section -->
+                <div class="report-section">
+                    <div class="section-header-with-filter">
+                        <h3 class="section-title">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                            </svg>
+                            Detailed Claims Analysis
+                        </h3>
+                    </div>
+                    
+                    <div class="claims-list">
+                        <?php if (!empty($report_data['factcheck_results']) && is_array($report_data['factcheck_results'])): ?>
+                            <?php foreach ($report_data['factcheck_results'] as $index => $claim): 
+                                $rating_lower = strtolower($claim['rating'] ?? 'unknown');
+                                $rating_class = 'rating-unknown';
+                                
+                                if (strpos($rating_lower, 'true') !== false && strpos($rating_lower, 'false') === false) {
+                                    $rating_class = 'rating-true';
+                                } elseif (strpos($rating_lower, 'false') !== false) {
+                                    $rating_class = 'rating-false';
+                                } elseif (strpos($rating_lower, 'misleading') !== false || strpos($rating_lower, 'mixed') !== false) {
+                                    $rating_class = 'rating-misleading';
+                                }
+                            ?>
+                            <div class="claim-card <?php echo esc_attr($rating_class); ?>">
+                                <div class="claim-header">
+                                    <div class="claim-rating-badge <?php echo esc_attr($rating_class); ?>">
+                                        <?php echo esc_html($claim['rating'] ?? 'Unknown'); ?>
+                                    </div>
+                                    <div class="claim-confidence">
+                                        Confidence: <?php echo esc_html(round(($claim['confidence'] ?? 0.5) * 100)); ?>%
+                                    </div>
+                                </div>
+                                <div class="claim-text">
+                                    <?php echo esc_html($claim['claim']); ?>
+                                </div>
+                                <div class="claim-explanation">
+                                    <?php echo wp_kses_post(wpautop($claim['explanation'] ?? 'No explanation available')); ?>
+                                </div>
+                                
+                                <?php if (!empty($claim['sources']) && is_array($claim['sources'])): ?>
+                                <div class="claim-sources">
+                                    <strong>Sources:</strong>
+                                    <ul>
+                                        <?php foreach ($claim['sources'] as $source): ?>
+                                            <?php if (!empty($source['url']) && !empty($source['name'])): ?>
+                                            <li>
+                                                <a href="<?php echo esc_url($source['url']); ?>" target="_blank" rel="noopener noreferrer">
+                                                    <?php echo esc_html($source['name']); ?>
+                                                </a>
+                                            </li>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <p>No claims analyzed yet.</p>
+                        <?php endif; ?>
+                    </div>
                 </div>
+                
+                <!-- Sources Section -->
+                <?php if (!empty($report_data['sources']) && is_array($report_data['sources'])): ?>
+                <div class="report-section">
+                    <h3 class="section-title">
+                        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                        </svg>
+                        Sources Consulted
+                    </h3>
+                    <div class="sources-list">
+                        <?php 
+                        $unique_sources = array();
+                        foreach ($report_data['sources'] as $source) {
+                            $url = $source['url'] ?? '';
+                            if (!empty($url) && !isset($unique_sources[$url])) {
+                                $unique_sources[$url] = $source;
+                            }
+                        }
+                        
+                        foreach ($unique_sources as $source): 
+                            $domain = parse_url($source['url'] ?? '', PHP_URL_HOST);
+                            $favicon = "https://www.google.com/s2/favicons?domain={$domain}&sz=32";
+                        ?>
+                        <div class="source-item">
+                            <div class="source-icon">
+                                <img src="<?php echo esc_url($favicon); ?>" alt="<?php echo esc_attr($domain); ?>" onerror="this.style.display='none'">
+                            </div>
+                            <div class="source-info">
+                                <a href="<?php echo esc_url($source['url']); ?>" target="_blank" rel="noopener noreferrer" class="source-name">
+                                    <?php echo esc_html($source['name'] ?? $domain); ?>
+                                </a>
+                                <div class="source-domain"><?php echo esc_html($domain); ?></div>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
                 
             </div>
         </div>

@@ -199,10 +199,8 @@ let currentReportId = null;
       },
       success: function (response) {
         if (response.success) {
-          window.location.href =
-            aiVerifyFactcheck.results_url +
-            "?report=" +
-            response.data.report_id;
+          // Use the report URL from the server response instead of constructing it
+          window.location.href = response.data.report_url;
         } else {
           alert(response.data.message || "Failed to start fact-check");
           $btn

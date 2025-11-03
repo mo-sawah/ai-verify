@@ -215,8 +215,22 @@ class AI_Verify_Factcheck_Ajax {
             wp_send_json_error(array('message' => 'Failed to create report'));
         }
         
+        // Create placeholder post immediately so we have a proper URL
+        $placeholder_data = array(
+            'report_id' => $report_id,
+            'input_type' => $input_type,
+            'input_value' => $input_value,
+            'overall_score' => 0,
+            'credibility_rating' => 'Analyzing...',
+            'status' => 'pending'
+        );
+        
+        $post_id = AI_Verify_Factcheck_Post_Generator::create_report_post($report_id, $placeholder_data);
+        $report_url = $post_id ? get_permalink($post_id) : (aiVerifyFactcheck.results_url . '?report=' . $report_id);
+        
         wp_send_json_success(array(
             'report_id' => $report_id,
+            'report_url' => $report_url,
             'message' => 'Report created successfully'
         ));
     }
@@ -278,7 +292,8 @@ class AI_Verify_Factcheck_Ajax {
                 if (is_wp_error($scraped)) {
                     throw new Exception($scraped->get_error_message());
                 }
-                AI_Verify_Factcheck_Database::save_scraped_content($report_id, json_encode($scraped), 'article');
+                // Pass the scraped data array directly (not JSON encoded)
+                AI_Verify_Factcheck_Database::save_scraped_content($report_id, $scraped, 'article');
                 $content = $scraped['content'];
                 $context = $scraped['title'];
             } else {

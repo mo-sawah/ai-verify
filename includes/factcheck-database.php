@@ -127,22 +127,45 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * Save scraped content
+     * Save scraped content with metadata
      */
-    public static function save_scraped_content($report_id, $content, $content_type = 'article') {
+    public static function save_scraped_content($report_id, $scraped_data, $content_type = 'article') {
         global $wpdb;
         
         $table_name = $wpdb->prefix . self::$table_name;
         
+        // Build metadata array with article info
+        $metadata = array(
+            'title' => $scraped_data['title'] ?? '',
+            'author' => $scraped_data['author'] ?? '',
+            'date' => $scraped_data['date'] ?? '',
+            'word_count' => $scraped_data['word_count'] ?? 0,
+            'excerpt' => $scraped_data['excerpt'] ?? '',
+            'url' => $scraped_data['url'] ?? ''
+        );
+        
+        $update_data = array(
+            'scraped_content' => $scraped_data['content'] ?? '',
+            'content_type' => sanitize_text_field($content_type),
+            'status' => 'scraped'
+        );
+        
+        // Get existing metadata and merge
+        $existing = $wpdb->get_var(
+            $wpdb->prepare("SELECT metadata FROM $table_name WHERE report_id = %s", $report_id)
+        );
+        
+        $existing_metadata = !empty($existing) ? json_decode($existing, true) : array();
+        $merged_metadata = array_merge($existing_metadata, $metadata);
+        $update_data['metadata'] = json_encode($merged_metadata);
+        
         $wpdb->update(
             $table_name,
-            array(
-                'scraped_content' => $content,
-                'content_type' => sanitize_text_field($content_type),
-                'status' => 'scraped'
-            ),
+            $update_data,
             array('report_id' => $report_id)
         );
+        
+        error_log("AI Verify: Saved scraped content with metadata for {$report_id} - Title: " . ($metadata['title'] ?: 'Unknown'));
     }
     
     /**

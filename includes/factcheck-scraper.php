@@ -386,7 +386,17 @@ class AI_Verify_Factcheck_Scraper {
         $paragraphs = self::extract_paragraphs($content);
         $word_count = str_word_count(strip_tags($content));
         
+        // Extract excerpt safely for display
+        $excerpt = '';
+        if (!empty($paragraphs)) {
+            $excerpt = mb_substr($paragraphs[0], 0, 200);
+            if (mb_strlen($paragraphs[0]) > 200) {
+                $excerpt .= '...';
+            }
+        }
+        
         error_log("AI Verify: Final - {$word_count} words, " . count($paragraphs) . " paragraphs");
+        error_log("AI Verify: Metadata - Title: {$title}, Author: " . ($author ?: 'Unknown') . ", Date: " . ($date ?: 'Unknown'));
         
         return array(
             'success' => true,
@@ -396,6 +406,7 @@ class AI_Verify_Factcheck_Scraper {
             'author' => $author,
             'date' => $date,
             'word_count' => $word_count,
+            'excerpt' => $excerpt,
             'url' => $original_url,
             'scraped_at' => current_time('mysql')
         );
