@@ -2,6 +2,7 @@
 /**
  * Fact-Check Processing Template
  * Shows real-time analysis progress with engaging updates
+ * IMPROVED: Extended timeout, better claim display, fallback redirect
  */
 
 if (!defined('ABSPATH')) {
@@ -256,6 +257,7 @@ if (!$report) {
     font-size: 14px;
     color: #374151;
     animation: slideIn 0.4s ease forwards;
+    opacity: 0;
 }
 
 .claim-number {
@@ -315,7 +317,8 @@ if (!$report) {
     
     let pollInterval;
     let progressPercentage = 0;
-    let currentSteps = [];
+    let shownClaims = new Set(); // Track which claims we've displayed
+    let consecutiveFailures = 0; // Track failed AJAX calls
     
     // Step templates
     const steps = [
@@ -328,7 +331,7 @@ if (!$report) {
     ];
     
     function updateProgress(percentage, mainText, subText) {
-        progressPercentage = Math.min(percentage, 95); // Cap at 95% until complete
+        progressPercentage = Math.min(percentage, 95);
         document.getElementById('progressBar').style.width = progressPercentage + '%';
         document.getElementById('statusMain').textContent = mainText;
         document.getElementById('statusSub').textContent = subText;
@@ -342,7 +345,12 @@ if (!$report) {
         if (existingStep) {
             existingStep.className = `step-item ${status}`;
             if (detail) {
-                const detailEl = existingStep.querySelector('.step-detail');
+                let detailEl = existingStep.querySelector('.step-detail');
+                if (!detailEl && detail) {
+                    detailEl = document.createElement('div');
+                    detailEl.className = 'step-detail';
+                    existingStep.querySelector('.step-content').appendChild(detailEl);
+                }
                 if (detailEl) detailEl.textContent = detail;
             }
             return;
@@ -364,17 +372,52 @@ if (!$report) {
     }
     
     function showClaimPreview(claimText, claimNumber) {
+        // Don't show duplicate claims
+        if (shownClaims.has(claimNumber)) return;
+        shownClaims.add(claimNumber);
+        
         let previewContainer = document.querySelector('.claims-preview');
         if (!previewContainer) {
             previewContainer = document.createElement('div');
             previewContainer.className = 'claims-preview';
+            previewContainer.innerHTML = '<h4 style="color: #374151; font-size: 14px; font-weight: 600; margin: 20px 0 10px 0;">🔍 Claims Being Verified:</h4>';
             document.getElementById('progressSteps').appendChild(previewContainer);
+        }
+        
+        // Truncate very long claims
+        let displayText = claimText;
+        if (claimText.length > 150) {
+            displayText = claimText.substring(0, 150) + '...';
         }
         
         const claimEl = document.createElement('div');
         claimEl.className = 'claim-item';
-        claimEl.innerHTML = `<span class="claim-number">Claim ${claimNumber}:</span>${claimText}`;
+        claimEl.style.animationDelay = `${shownClaims.size * 0.1}s`; // Stagger animations
+        claimEl.innerHTML = `<span class="claim-number">Claim ${claimNumber}:</span>${displayText}`;
         previewContainer.appendChild(claimEl);
+        
+        // Scroll to bottom smoothly
+        setTimeout(() => {
+            claimEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+    }
+    
+    function checkCompletionDirectly() {
+        // Fallback: Check database directly for completion
+        jQuery.post(ajaxUrl, {
+            action: 'ai_verify_get_report',
+            nonce: nonce,
+            report_id: reportId
+        }, function(response) {
+            if (response.success && response.data.report) {
+                const report = response.data.report;
+                if (report.status === 'completed' && report.report_url) {
+                    console.log('AI Verify: Report completed, redirecting to:', report.report_url);
+                    clearInterval(pollInterval);
+                    window.location.href = report.report_url;
+                }
+            }
+        });
     }
     
     function startAnalysis() {
@@ -391,7 +434,7 @@ if (!$report) {
     
     function pollForStatus() {
         let pollCount = 0;
-        const maxPolls = 180; // 3 minutes max (180 * 1 second)
+        const maxPolls = 600; // 10 minutes (600 * 1 second) - MUCH LONGER FOR COMPLEX ARTICLES
         
         pollInterval = setInterval(function() {
             pollCount++;
@@ -401,6 +444,8 @@ if (!$report) {
                 nonce: nonce,
                 report_id: reportId
             }, function(response) {
+                consecutiveFailures = 0; // Reset on success
+                
                 if (response.success) {
                     const data = response.data;
                     const progress = parseInt(data.progress) || 0;
@@ -419,8 +464,8 @@ if (!$report) {
                         updateProgress(progress, 'Verifying Facts', message);
                         
                         // Show claim previews if available
-                        if (data.current_claim) {
-                            showClaimPreview(data.current_claim, data.claim_number || 1);
+                        if (data.current_claim && data.claim_number) {
+                            showClaimPreview(data.current_claim, data.claim_number);
                         }
                     } else if (progress >= 60 && progress < 80) {
                         addStep('scraping', 'completed');
@@ -428,6 +473,11 @@ if (!$report) {
                         addStep('verification', 'active');
                         addStep('sources', 'active', message);
                         updateProgress(progress, 'Analyzing Sources', message);
+                        
+                        // Continue showing claims during this phase too
+                        if (data.current_claim && data.claim_number) {
+                            showClaimPreview(data.current_claim, data.claim_number);
+                        }
                     } else if (progress >= 80 && progress < 95) {
                         addStep('scraping', 'completed');
                         addStep('claims', 'completed');
@@ -451,7 +501,7 @@ if (!$report) {
                         
                         // Redirect to report after brief delay
                         setTimeout(function() {
-                            const reportUrl = data.report_url || window.location.href.replace(/[?&]processing=1/, '');
+                            const reportUrl = data.report_url || window.location.href.replace(/[?&]processing=1/, '').replace(/[?&]report=[^&]*/, '');
                             window.location.href = reportUrl;
                         }, 1500);
                     } else if (status === 'error') {
@@ -467,17 +517,39 @@ if (!$report) {
                         `;
                     }
                 }
+            }).fail(function(xhr, status, error) {
+                consecutiveFailures++;
+                console.error('AI Verify: Poll failed', status, error);
+                
+                // If too many failures, check directly
+                if (consecutiveFailures >= 3) {
+                    checkCompletionDirectly();
+                }
             });
+            
+            // Every 30 seconds, do a backup check
+            if (pollCount % 30 === 0) {
+                checkCompletionDirectly();
+            }
             
             // Timeout after max polls
             if (pollCount >= maxPolls) {
                 clearInterval(pollInterval);
-                document.querySelector('.progress-main').innerHTML = `
-                    <div class="error-message">
-                        <h3>⏱️ Analysis Timeout</h3>
-                        <p>The analysis is taking longer than expected. Please try again or contact support.</p>
-                    </div>
-                `;
+                // Try one last direct check
+                checkCompletionDirectly();
+                
+                setTimeout(function() {
+                    document.querySelector('.progress-main').innerHTML = `
+                        <div class="error-message">
+                            <h3>⏱️ Extended Processing</h3>
+                            <p>This analysis is taking longer than expected. The report may still be processing in the background.</p>
+                            <button onclick="window.location.reload()" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                                Check Status
+                            </button>
+                            <p style="margin-top: 16px; font-size: 13px; color: #6b7280;">You can also check your reports page to see if it completed.</p>
+                        </div>
+                    `;
+                }, 2000);
             }
         }, 1000); // Poll every 1 second
     }
