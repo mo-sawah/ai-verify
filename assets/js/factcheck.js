@@ -408,6 +408,12 @@ let currentReportId = null;
     setupClaimsFilter();
   }
 
+  /**
+   * IMPROVED populateSourceCard Function
+   * Replace lines 411-505 in factcheck.js with this version
+   * This version correctly uses metadata instead of trying to parse HTML
+   */
+
   function populateSourceCard(report) {
     if (report.input_type === "url" && report.input_value) {
       try {
@@ -418,66 +424,53 @@ let currentReportId = null;
         $("#sourceArticleCard").fadeIn(300);
 
         // Set inline favicon before domain name
-        const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        const faviconUrl =
+          report.metadata?.favicon ||
+          `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
         $("#sourceFaviconInline").html(
           `<img src="${faviconUrl}" alt="${domain}" onerror="this.style.display='none'">`
         );
 
-        // Extract title from scraped content or use URL
-        let title = report.input_value;
-        let featuredImage = null;
+        // Get title from metadata (preferred) or fall back to other sources
+        let title = report.metadata?.title || report.input_value;
 
-        if (report.scraped_content) {
-          // Try to extract title
-          const titleMatch = report.scraped_content.match(
-            /<title>(.*?)<\/title>/i
-          );
-          if (titleMatch && titleMatch[1]) {
-            title = titleMatch[1]
-              .replace(/&amp;/g, "&")
-              .replace(/&lt;/g, "<")
-              .replace(/&gt;/g, ">")
-              .replace(/&quot;/g, '"')
-              .replace(/&#039;/g, "'")
-              .trim();
-          }
+        // Get description from metadata
+        let description = report.metadata?.description || "";
 
-          // Try to extract Open Graph image
-          const ogImageMatch = report.scraped_content.match(
-            /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i
-          );
-          if (ogImageMatch && ogImageMatch[1]) {
-            featuredImage = ogImageMatch[1];
-          } else {
-            // Try Twitter card image
-            const twitterImageMatch = report.scraped_content.match(
-              /<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i
-            );
-            if (twitterImageMatch && twitterImageMatch[1]) {
-              featuredImage = twitterImageMatch[1];
-            }
-          }
-        }
+        // Get featured image from metadata
+        let featuredImage = report.metadata?.featured_image || null;
+
+        // Fallback image if no featured image found
+        const fallbackImage =
+          "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE4IiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Tm8gSW1hZ2UgQXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==";
 
         // Set title as clickable link
         $("#sourceTitle").text(title);
         $("#sourceUrl").attr("href", report.input_value);
 
         // Set domain
-        $("#sourceDomain").text(domain);
+        const displayDomain = report.metadata?.domain || domain;
+        $("#sourceDomain").text(displayDomain);
 
-        // Set date
-        $("#sourceDate").text(formatDate(report.created_at));
+        // Set date - use metadata date or report creation date
+        const displayDate = report.metadata?.date
+          ? new Date(report.metadata.date).toLocaleDateString()
+          : formatDate(report.created_at);
+        $("#sourceDate").text(displayDate);
 
-        // Display featured image if found
-        if (featuredImage) {
-          const $img = $("#sourceImageImg");
-          $img.on("error", function () {
-            $("#sourceImage").hide();
-          });
-          $img.attr("src", featuredImage).attr("alt", title);
-          $("#sourceImage").fadeIn(200);
-        }
+        // Display featured image or fallback
+        const imageToDisplay = featuredImage || fallbackImage;
+        const $img = $("#sourceImageImg");
+
+        $img.on("error", function () {
+          // If real image fails to load, use fallback
+          if (this.src !== fallbackImage) {
+            this.src = fallbackImage;
+          }
+        });
+
+        $img.attr("src", imageToDisplay).attr("alt", title);
+        $("#sourceImage").fadeIn(200);
 
         // Update badge
         const score = parseFloat(report.overall_score) || 0;
@@ -498,6 +491,15 @@ let currentReportId = null;
         } else {
           badgeEl.addClass("badge-very-low");
         }
+
+        // Log metadata for debugging
+        console.log("Source Card Metadata:", {
+          title: title,
+          description: description,
+          image: featuredImage ? "YES" : "NO (using fallback)",
+          domain: displayDomain,
+          date: displayDate,
+        });
       } catch (e) {
         console.log("Could not parse URL for source card:", e);
       }

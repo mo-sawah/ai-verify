@@ -1,8 +1,10 @@
 <?php
 /**
- * Web Scraper Engine - IMPROVED with auto-fallback and Daily Mail filtering
+ * Web Scraper Engine - IMPROVED with Metadata Extraction
  * Uses ScraperAPI (fast, reliable) or Firecrawl with adaptive filtering
  * IMPROVEMENTS:
+ * - Enhanced metadata extraction (title, description, featured_image, author, date)
+ * - Uses AI_Verify_Metadata_Extractor for comprehensive metadata parsing
  * - Automatic fallback to Jina if ScraperAPI/Firecrawl fails
  * - Special Daily Mail content filtering (removes recommended articles)
  * - Better error handling and logging
@@ -49,6 +51,7 @@ class AI_Verify_Factcheck_Scraper {
 
     /**
      * SCRAPERAPI: Fast, reliable, handles JavaScript
+     * UPDATED: Now uses AI_Verify_Metadata_Extractor for comprehensive metadata
      */
     private static function scrape_with_scraperapi($url) {
         $api_key = get_option('ai_verify_scraperapi_key');
@@ -88,18 +91,39 @@ class AI_Verify_Factcheck_Scraper {
             return new WP_Error('scraperapi_error', 'ScraperAPI returned empty content');
         }
         
+        // Extract metadata using the new extractor
+        if (class_exists('AI_Verify_Metadata_Extractor')) {
+            $metadata = AI_Verify_Metadata_Extractor::extract_metadata($html, $url);
+        } else {
+            // Fallback to basic extraction
+            $metadata = array(
+                'title' => self::extract_title_from_html($html),
+                'description' => '',
+                'featured_image' => '',
+                'author' => '',
+                'date' => '',
+                'domain' => '',
+                'favicon' => ''
+            );
+        }
+        
         // Convert HTML to clean markdown
         $markdown = self::html_to_markdown($html);
-        $title = self::extract_title_from_html($html);
         
         // Apply smart filtering (includes Daily Mail specific filtering)
         $markdown = self::smart_filter($markdown, $url);
         
-        error_log('AI Verify: ScraperAPI success - extracted ' . strlen($markdown) . ' chars');
+        error_log('AI Verify: ScraperAPI success - Title: "' . substr($metadata['title'], 0, 50) . '", Image: ' . ($metadata['featured_image'] ? 'YES' : 'NO') . ', Desc: ' . ($metadata['description'] ? 'YES' : 'NO'));
         
         return array(
-            'title' => $title,
-            'content' => $markdown
+            'title' => $metadata['title'],
+            'content' => $markdown,
+            'description' => $metadata['description'],
+            'featured_image' => $metadata['featured_image'],
+            'author' => $metadata['author'],
+            'date' => $metadata['date'],
+            'domain' => $metadata['domain'],
+            'favicon' => $metadata['favicon']
         );
     }
 
@@ -145,7 +169,7 @@ class AI_Verify_Factcheck_Scraper {
     }
     
     /**
-     * Extract title from HTML
+     * Extract title from HTML (fallback method)
      */
     private static function extract_title_from_html($html) {
         if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $match)) {
@@ -222,9 +246,14 @@ class AI_Verify_Factcheck_Scraper {
             $featured_image = is_array($metadata['ogImage']) ? ($metadata['ogImage'][0]['url'] ?? '') : $metadata['ogImage'];
         }
         if (empty($featured_image) && !empty($html)) {
-            // Extract from HTML as fallback
-            if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']/i', $html, $match)) {
-                $featured_image = $match[1];
+            // Extract from HTML as fallback using metadata extractor
+            if (class_exists('AI_Verify_Metadata_Extractor')) {
+                $extracted = AI_Verify_Metadata_Extractor::extract_metadata($html, $url);
+                $featured_image = $extracted['featured_image'] ?? '';
+                if (empty($title)) $title = $extracted['title'];
+                if (empty($description)) $description = $extracted['description'];
+                if (empty($author)) $author = $extracted['author'];
+                if (empty($date)) $date = $extracted['date'];
             }
         }
         
@@ -241,7 +270,12 @@ class AI_Verify_Factcheck_Scraper {
         
         $content = self::smart_filter($markdown, $url);
         
-        error_log('AI Verify: Firecrawl success - Title: ' . substr($title, 0, 50) . ', Image: ' . ($featured_image ? 'YES' : 'NO'));
+        // Get domain and favicon
+        $parsed_url = parse_url($url);
+        $domain = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
+        $favicon = "https://www.google.com/s2/favicons?domain={$domain}&sz=128";
+        
+        error_log('AI Verify: Firecrawl success - Title: "' . substr($title, 0, 50) . '", Image: ' . ($featured_image ? 'YES' : 'NO'));
 
         return array(
             'title'   => $title ?: 'Untitled',
@@ -249,7 +283,9 @@ class AI_Verify_Factcheck_Scraper {
             'description' => $description,
             'featured_image' => $featured_image,
             'author' => $author,
-            'date' => $date
+            'date' => $date,
+            'domain' => $domain,
+            'favicon' => $favicon
         );
     }
     
@@ -288,6 +324,11 @@ class AI_Verify_Factcheck_Scraper {
 
         $content = $body['data']['markdown'];
         $content = self::smart_filter($content, $url);
+        
+        // Get domain and favicon
+        $parsed_url = parse_url($url);
+        $domain = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
+        $favicon = "https://www.google.com/s2/favicons?domain={$domain}&sz=128";
 
         return array(
             'title'   => $body['data']['metadata']['title'] ?? 'Untitled',
@@ -295,12 +336,15 @@ class AI_Verify_Factcheck_Scraper {
             'description' => '',
             'featured_image' => '',
             'author' => '',
-            'date' => ''
+            'date' => '',
+            'domain' => $domain,
+            'favicon' => $favicon
         );
     }
     
     /**
      * Jina Reader (free fallback)
+     * UPDATED: Now extracts HTML for metadata when possible
      */
     private static function scrape_with_jina($url) {
         error_log('AI Verify: Using Jina Reader for: ' . $url);
@@ -309,7 +353,10 @@ class AI_Verify_Factcheck_Scraper {
         
         $response = wp_remote_get($jina_url, array(
             'timeout' => 30,
-            'headers' => array('X-With-Generated-Alt' => 'true')
+            'headers' => array(
+                'X-With-Generated-Alt' => 'true',
+                'X-Return-Format' => 'html'
+            )
         ));
         
         if (is_wp_error($response)) {
@@ -323,14 +370,45 @@ class AI_Verify_Factcheck_Scraper {
             return new WP_Error('scrape_failed', 'Jina Reader failed. Status: ' . $status);
         }
         
-        preg_match('/^# (.+)$/m', $body, $title_match);
-        $title = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($url);
+        // Try to extract metadata if we got HTML
+        $metadata = array(
+            'title' => '',
+            'description' => '',
+            'featured_image' => '',
+            'author' => '',
+            'date' => '',
+            'domain' => '',
+            'favicon' => ''
+        );
+        
+        if (class_exists('AI_Verify_Metadata_Extractor') && strpos($body, '<html') !== false) {
+            // Jina returned HTML, extract metadata
+            $metadata = AI_Verify_Metadata_Extractor::extract_metadata($body, $url);
+            $body = self::html_to_markdown($body);
+        } else {
+            // Jina returned markdown, extract title from it
+            preg_match('/^# (.+)$/m', $body, $title_match);
+            $metadata['title'] = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($url);
+            
+            // Get domain and favicon
+            $parsed_url = parse_url($url);
+            $metadata['domain'] = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
+            $metadata['favicon'] = "https://www.google.com/s2/favicons?domain={$metadata['domain']}&sz=128";
+        }
 
         $body = self::smart_filter($body, $url);
 
+        error_log('AI Verify: Jina success - Title: "' . substr($metadata['title'], 0, 50) . '", Image: ' . ($metadata['featured_image'] ? 'YES' : 'NO'));
+
         return array(
-            'title' => $title,
-            'content' => $body
+            'title' => $metadata['title'],
+            'content' => $body,
+            'description' => $metadata['description'],
+            'featured_image' => $metadata['featured_image'],
+            'author' => $metadata['author'],
+            'date' => $metadata['date'],
+            'domain' => $metadata['domain'],
+            'favicon' => $metadata['favicon']
         );
     }
     
@@ -473,6 +551,15 @@ class AI_Verify_Factcheck_Scraper {
         $featured_image = $scrape_result['featured_image'] ?? '';
         $author = $scrape_result['author'] ?? '';
         $date = $scrape_result['date'] ?? '';
+        $domain = $scrape_result['domain'] ?? '';
+        $favicon = $scrape_result['favicon'] ?? '';
+        
+        // If no domain/favicon, extract from URL
+        if (empty($domain)) {
+            $parsed_url = parse_url($original_url);
+            $domain = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
+            $favicon = "https://www.google.com/s2/favicons?domain={$domain}&sz=128";
+        }
         
         // If no author/date from scraper, try to extract from content
         if (empty($author)) {
@@ -495,7 +582,7 @@ class AI_Verify_Factcheck_Scraper {
             }
         }
         
-        error_log("AI Verify: Final - {$word_count} words, Title: " . substr($title, 0, 50) . ", Image: " . ($featured_image ? 'YES' : 'NO'));
+        error_log("AI Verify: Final parse - {$word_count} words, Title: '" . substr($title, 0, 50) . "', Image: " . ($featured_image ? 'YES' : 'NO') . ", Desc: " . ($description ? 'YES' : 'NO'));
         
         return array(
             'success' => true,
@@ -508,6 +595,8 @@ class AI_Verify_Factcheck_Scraper {
             'excerpt' => $excerpt,
             'description' => $description,
             'featured_image' => $featured_image,
+            'domain' => $domain,
+            'favicon' => $favicon,
             'url' => $original_url,
             'scraped_at' => current_time('mysql')
         );
