@@ -213,18 +213,33 @@ class AI_Verify_Factcheck_Post_Generator {
      * Extract and set featured image from report
      */
     private static function set_featured_image($post_id, $report_data) {
-        if (empty($report_data['scraped_content'])) {
+        $image_url = '';
+        
+        // Priority 1: Get from metadata (from Firecrawl/scraper)
+        if (!empty($report_data['metadata']['featured_image'])) {
+            $image_url = $report_data['metadata']['featured_image'];
+            error_log("AI Verify: Using featured image from metadata: " . substr($image_url, 0, 50));
+        }
+        
+        // Priority 2: Extract from scraped content
+        if (empty($image_url) && !empty($report_data['scraped_content'])) {
+            $content = $report_data['scraped_content'];
+            
+            if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']/i', $content, $match)) {
+                $image_url = $match[1];
+            } elseif (preg_match('/<meta[^>]*name=["\']twitter:image["\'][^>]*content=["\']([^"\']+)["\']/i', $content, $match)) {
+                $image_url = $match[1];
+            }
+        }
+        
+        if (empty($image_url)) {
+            error_log("AI Verify: No featured image found for post {$post_id}");
             return false;
         }
         
-        // Try to extract Open Graph image
-        $content = $report_data['scraped_content'];
-        
-        if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']/i', $content, $match)) {
-            $image_url = $match[1];
-        } elseif (preg_match('/<meta[^>]*name=["\']twitter:image["\'][^>]*content=["\']([^"\']+)["\']/i', $content, $match)) {
-            $image_url = $match[1];
-        } else {
+        // Validate URL
+        if (!filter_var($image_url, FILTER_VALIDATE_URL)) {
+            error_log("AI Verify: Invalid image URL: {$image_url}");
             return false;
         }
         
@@ -237,7 +252,10 @@ class AI_Verify_Factcheck_Post_Generator {
         
         if (!is_wp_error($attachment_id)) {
             set_post_thumbnail($post_id, $attachment_id);
+            error_log("AI Verify: Successfully set featured image (attachment {$attachment_id}) for post {$post_id}");
             return true;
+        } else {
+            error_log("AI Verify: Failed to set featured image for post {$post_id}: " . $attachment_id->get_error_message());
         }
         
         return false;
