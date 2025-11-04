@@ -1,11 +1,7 @@
 <?php
 /**
- * FIXED: Fact-Check Analyzer
- * ALL ISSUES RESOLVED:
- * - UTF-8 encoding fixed
- * - Explanations properly parsed (no more JSON display)
- * - Method label shows "AI Analysis" only
- * - Enhanced prompts for detailed analysis
+ * FIXED: Fact-Check Analyzer with Improved JSON Parsing
+ * Fixes the issue where JSON parsing fails due to control characters
  */
 
 if (!defined('ABSPATH')) {
@@ -37,22 +33,8 @@ class AI_Verify_Factcheck_Analyzer {
      */
     private static function clean_utf8_recursive($data) {
         if (is_string($data)) {
-            // 1. Try to use iconv first, as it's very effective at ignoring invalid bytes.
-            if (function_exists('iconv')) {
-                $data = @iconv('UTF-8', 'UTF-8//IGNORE', $data);
-                if ($data === false) {
-                    // iconv failed, fallback to mb_convert
-                    $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
-                }
-            } else {
-                // iconv not available, use mb_convert
-                $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
-            }
-
-            // 2. Aggressively strip all non-printable ASCII control characters
-            // (Note: the 'u' flag is removed to operate on raw bytes)
-            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
-            
+            $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $data);
             return $data;
         }
         
@@ -69,6 +51,27 @@ class AI_Verify_Factcheck_Analyzer {
         }
         
         return $data;
+    }
+    
+    /**
+     * CRITICAL FIX: Clean JSON string before decoding
+     */
+    private static function clean_json_string($json_string) {
+        // Remove BOM
+        $json_string = preg_replace('/^\xEF\xBB\xBF/', '', $json_string);
+        
+        // Remove control characters EXCEPT newline, carriage return, and tab
+        $json_string = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $json_string);
+        
+        // Fix common issues
+        $json_string = str_replace(["\r\n", "\r"], "\n", $json_string);
+        
+        // Ensure proper UTF-8
+        if (!mb_check_encoding($json_string, 'UTF-8')) {
+            $json_string = mb_convert_encoding($json_string, 'UTF-8', 'UTF-8');
+        }
+        
+        return $json_string;
     }
     
     /**
@@ -111,7 +114,7 @@ class AI_Verify_Factcheck_Analyzer {
                 'evidence_for' => array(),
                 'evidence_against' => array(),
                 'red_flags' => array(),
-                'method' => 'AI Analysis' // FIXED: Simplified label
+                'method' => 'AI Analysis'
             );
             
             // Check Google Fact Check API first
@@ -144,7 +147,6 @@ class AI_Verify_Factcheck_Analyzer {
                 $result['evidence_for'] = $ai_result['evidence_for'] ?? array();
                 $result['evidence_against'] = $ai_result['evidence_against'] ?? array();
                 $result['red_flags'] = $ai_result['red_flags'] ?? array();
-                // Keep method as 'AI Analysis'
             } else {
                 $result['rating'] = 'Unverified';
                 $result['explanation'] = 'Unable to verify this claim with available sources.';
@@ -365,62 +367,124 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
     }
 
     /**
-     * FIXED: Parse response - ensures explanation is always plain text, not JSON
+     * CRITICAL FIX: Parse response with better error handling
      */
     private static function parse_fact_check_response($content) {
-        // Extract JSON from response
-        preg_match('/\{.*\}/s', $content, $matches);
+        // Clean the content first
+        $content = self::clean_utf8_recursive($content);
         
-        if (!empty($matches[0])) {
-            $result = json_decode($matches[0], true);
-
-            /// --- START FINAL FIX ---
-                // Clean the string using our new robust function
-                $json_string = self::clean_utf8_recursive($matches[0]);
-
-                // NOW, use the JSON_INVALID_UTF8_IGNORE flag during decode.
-                // This tells the parser to simply drop bad characters. (Requires PHP 7.2+)
-                $result = json_decode($json_string, true, 512, JSON_INVALID_UTF8_IGNORE);
-
-                // Log an error if decoding still fails for a *different* reason
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    error_log('AI Verify: JSON decode failed DESPITE IGNORE - ' . json_last_error_msg());
-                    $result = null; // Force fallback
-                }
-                // --- END FINAL FIX ---
+        // Try to extract JSON from markdown code blocks first
+        if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $content, $matches)) {
+            $json_str = $matches[1];
+        } elseif (preg_match('/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/s', $content, $matches)) {
+            // Extract JSON object (more careful pattern)
+            $json_str = $matches[0];
+        } else {
+            // No JSON found at all
+            error_log('AI Verify: No JSON found in response');
+            return self::create_fallback_result($content);
+        }
+        
+        // Clean the JSON string
+        $json_str = self::clean_json_string($json_str);
+        
+        // Try to decode
+        $result = json_decode($json_str, true);
+        $json_error = json_last_error();
+        
+        if ($json_error !== JSON_ERROR_NONE) {
+            error_log('AI Verify: JSON decode failed - ' . json_last_error_msg());
+            error_log('AI Verify: Problematic JSON (first 500 chars): ' . substr($json_str, 0, 500));
             
-            if ($result && isset($result['rating'])) {
-                // CRITICAL FIX: Ensure explanation is plain text string
-                $explanation = $result['explanation'] ?? 'No explanation provided';
-                
-                // If explanation is somehow still an array/object, convert to string
-                if (is_array($explanation) || is_object($explanation)) {
-                    $explanation = 'No explanation available';
-                }
-                
-                error_log('AI Verify: Parsed - Explanation length: ' . strlen($explanation));
-                
-                return array(
-                    'rating' => $result['rating'] ?? 'Unverified',
-                    'explanation' => $explanation, // ALWAYS a string
-                    'sources' => $result['sources'] ?? array(),
-                    'evidence_for' => $result['evidence_for'] ?? array(),
-                    'evidence_against' => $result['evidence_against'] ?? array(),
-                    'red_flags' => $result['red_flags'] ?? array(),
-                    'confidence' => isset($result['confidence']) ? floatval($result['confidence']) : 0.6
-                );
+            // Try to fix common JSON issues
+            $json_str = self::attempt_json_fix($json_str);
+            $result = json_decode($json_str, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                error_log('AI Verify: JSON still invalid after fix attempt');
+                return self::create_fallback_result($content);
             }
         }
         
-        // Fallback: extract rating from text
+        // Validate the result structure
+        if (!is_array($result) || !isset($result['rating'])) {
+            error_log('AI Verify: Invalid result structure');
+            return self::create_fallback_result($content);
+        }
+        
+        // Ensure explanation is ALWAYS a plain text string
+        $explanation = $result['explanation'] ?? 'No explanation provided';
+        
+        // If explanation is somehow an array or object, convert
+        if (is_array($explanation)) {
+            $explanation = implode("\n\n", array_filter($explanation, 'is_string'));
+        } elseif (is_object($explanation)) {
+            $explanation = 'No explanation available';
+        }
+        
+        // Ensure it's a string
+        $explanation = (string) $explanation;
+        
+        // Clean any remaining JSON-like structures
+        if (preg_match('/^\s*[\{\[]/', $explanation)) {
+            $explanation = 'Explanation could not be parsed properly.';
+        }
+        
+        error_log('AI Verify: Successfully parsed - Rating: ' . ($result['rating'] ?? 'none') . ', Explanation length: ' . strlen($explanation));
+        
+        return array(
+            'rating' => $result['rating'] ?? 'Unverified',
+            'explanation' => $explanation,
+            'sources' => $result['sources'] ?? array(),
+            'evidence_for' => $result['evidence_for'] ?? array(),
+            'evidence_against' => $result['evidence_against'] ?? array(),
+            'red_flags' => $result['red_flags'] ?? array(),
+            'confidence' => isset($result['confidence']) ? floatval($result['confidence']) : 0.6
+        );
+    }
+    
+    /**
+     * NEW: Attempt to fix common JSON issues
+     */
+    private static function attempt_json_fix($json_str) {
+        // Fix unescaped quotes in strings
+        $json_str = preg_replace_callback(
+            '/"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"/s',
+            function($matches) {
+                return '"' . addcslashes($matches[1], '"') . '"';
+            },
+            $json_str
+        );
+        
+        // Fix trailing commas
+        $json_str = preg_replace('/,(\s*[\]}])/', '$1', $json_str);
+        
+        return $json_str;
+    }
+    
+    /**
+     * NEW: Create fallback result when JSON parsing fails
+     */
+    private static function create_fallback_result($content) {
+        // Try to extract rating from text
         $rating = 'Unverified';
         if (preg_match('/(true|false|mostly true|mostly false|misleading|unverified|mixture)/i', $content, $rating_match)) {
             $rating = ucwords(strtolower($rating_match[1]));
         }
         
+        // Extract explanation (remove JSON-like structures)
+        $explanation = strip_tags($content);
+        $explanation = preg_replace('/\{[^}]+\}/', '', $explanation);
+        $explanation = preg_replace('/\[[^\]]+\]/', '', $explanation);
+        $explanation = trim($explanation);
+        
+        if (empty($explanation) || strlen($explanation) < 50) {
+            $explanation = 'Unable to provide detailed analysis due to parsing error.';
+        }
+        
         return array(
             'rating' => $rating,
-            'explanation' => 'A processing error occurred. The AI analyzer returned a response that could not be parsed, which may be due to invalid characters in the source text.',
+            'explanation' => $explanation,
             'sources' => array(),
             'evidence_for' => array(),
             'evidence_against' => array(),
