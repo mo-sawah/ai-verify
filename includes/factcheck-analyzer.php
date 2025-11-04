@@ -17,6 +17,19 @@ if (!defined('ABSPATH')) {
 class AI_Verify_Factcheck_Analyzer {
     
     /**
+     * Safe JSON encode that never returns boolean
+     */
+    private static function safe_json_encode($data) {
+        $json = json_encode($data);
+        if ($json === false) {
+            error_log('AI Verify: json_encode failed - ' . json_last_error_msg());
+            // Return empty JSON object as fallback
+            return '{}';
+        }
+        return $json;
+    }
+    
+    /**
      * Extract claims using AI (ClaimBuster removed - not working)
      */
     public static function extract_claims($content) {
@@ -148,21 +161,22 @@ IMPORTANT:
 - Always cite specific URLs in sources array
 - Confidence should reflect quality of sources (0.9+ for government/academic, 0.7+ for news)";
         
+        $request_body = array(
+            'model' => 'sonar-pro', // Built-in web search
+            'messages' => array(
+                array('role' => 'system', 'content' => 'You are a fact-checker. Always search the web and return valid JSON with evidence-based ratings.'),
+                array('role' => 'user', 'content' => $prompt)
+            ),
+            'temperature' => 0.2,
+            'max_tokens' => 2000
+        );
+        
         $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type' => 'application/json'
             ),
-            'body' => json_encode(array(
-                'model' => 'sonar-pro', // Built-in web search
-                'messages' => array(
-                    array('role' => 'system', 'content' => 'You are a fact-checker. Always search the web and return valid JSON with evidence-based ratings.'),
-                    array('role' => 'user', 'content' => $prompt)
-                ),
-                'temperature' => 0.2,
-                'max_tokens' => 2000
-                // **FIX:** REMOVED 'return_citations' and 'return_images' parameters which caused the 400 error.
-            )),
+            'body' => self::safe_json_encode($request_body),
             'timeout' => 90
         ));
         
@@ -283,7 +297,7 @@ CRITICAL INSTRUCTIONS:
                 'HTTP-Referer' => home_url(),
                 'X-Title' => get_bloginfo('name')
             ),
-            'body' => json_encode(array(
+            'body' => self::safe_json_encode(array(
                 'model' => $model,
                 'messages' => array(
                     array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON with evidence-based ratings using provided search results.'),
@@ -350,7 +364,7 @@ CRITICAL INSTRUCTIONS:
             'headers' => array(
                 'Content-Type' => 'application/json'
             ),
-            'body' => json_encode(array(
+            'body' => self::safe_json_encode(array(
                 'api_key' => $api_key,
                 'query' => $query,
                 'search_depth' => 'advanced', // Deep search for fact-checking
@@ -408,7 +422,7 @@ CRITICAL INSTRUCTIONS:
                 'Content-Type'  => 'application/json',
                 'Authorization' => 'Bearer ' . $api_key,
             ),
-            'body' => json_encode(array(
+            'body' => self::safe_json_encode(array(
                 'query' => $query,
                 'limit' => 5,
                 'lang' => 'en',
@@ -679,7 +693,7 @@ Article: {$content}";
                 'HTTP-Referer' => home_url(),
                 'X-Title' => get_bloginfo('name')
             ),
-            'body' => json_encode(array(
+            'body' => self::safe_json_encode(array(
                 'model' => $model,
                 'messages' => array(array('role' => 'user', 'content' => $prompt)),
                 'temperature' => 0.3,
