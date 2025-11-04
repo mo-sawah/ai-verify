@@ -37,8 +37,19 @@ class AI_Verify_Factcheck_Analyzer {
      */
     private static function clean_utf8_recursive($data) {
         if (is_string($data)) {
-            $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+            // 1. Force conversion to UTF-8, ignoring invalid characters.
+            // This is much stronger than mb_convert_encoding.
+            $data = @iconv('UTF-8', 'UTF-8//IGNORE', $data);
+            
+            // 2. Fallback just in case iconv isn't available
+            if ($data === false) {
+                $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+            }
+
+            // 3. Aggressively strip all non-printable ASCII control characters
+            // (Note: the 'u' flag is removed to operate on raw bytes)
             $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
+            
             return $data;
         }
         
@@ -403,7 +414,7 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
         
         return array(
             'rating' => $rating,
-            'explanation' => strip_tags($content),
+            'explanation' => 'A processing error occurred. The AI analyzer returned a response that could not be parsed, which may be due to invalid characters in the source text.',
             'sources' => array(),
             'evidence_for' => array(),
             'evidence_against' => array(),
