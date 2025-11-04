@@ -175,13 +175,15 @@ class AI_Verify_Factcheck_Database {
         
         $table_name = $wpdb->prefix . self::$table_name;
         
-        // Build metadata array with article info
+        // Build metadata array with article info (including description and featured_image)
         $metadata = array(
             'title' => $scraped_data['title'] ?? '',
             'author' => $scraped_data['author'] ?? '',
             'date' => $scraped_data['date'] ?? '',
             'word_count' => $scraped_data['word_count'] ?? 0,
             'excerpt' => $scraped_data['excerpt'] ?? '',
+            'description' => $scraped_data['description'] ?? '',
+            'featured_image' => $scraped_data['featured_image'] ?? '',
             'url' => $scraped_data['url'] ?? ''
         );
         
@@ -206,7 +208,7 @@ class AI_Verify_Factcheck_Database {
             array('report_id' => $report_id)
         );
         
-        error_log("AI Verify: Saved scraped content with metadata for {$report_id} - Title: " . ($metadata['title'] ?: 'Unknown'));
+        error_log("AI Verify: Saved scraped content with metadata for {$report_id} - Title: " . ($metadata['title'] ?: 'Unknown') . ", Image: " . ($metadata['featured_image'] ? 'YES' : 'NO'));
     }
     
     /**

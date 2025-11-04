@@ -198,30 +198,50 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                 });
                 </script>
                 
-                <?php if ($report_data['input_type'] === 'url' && !empty($report_data['input_value'])): 
-                    $url = $report_data['input_value'];
+                <?php 
+                // Always show source card, not just for URLs
+                $url = $report_data['input_value'] ?? '';
+                $metadata = $report_data['metadata'] ?? array();
+                
+                // Extract domain info if URL
+                $domain = '';
+                $favicon_url = '';
+                if (filter_var($url, FILTER_VALIDATE_URL)) {
                     $parsed = parse_url($url);
                     $domain = isset($parsed['host']) ? str_replace('www.', '', $parsed['host']) : '';
                     $favicon_url = "https://www.google.com/s2/favicons?domain={$domain}&sz=32";
-                    
-                    // Get metadata from database (stored separately now)
-                    $metadata = $report_data['metadata'] ?? array();
-                    $title = $metadata['title'] ?? $url;
-                    $author = $metadata['author'] ?? '';
-                    $date = $metadata['date'] ?? '';
-                    $excerpt = $metadata['excerpt'] ?? '';
-                    
-                    // Clean up title - remove site names
-                    if ($title !== $url) {
-                        $title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $title);
-                        $title = trim($title);
+                }
+                
+                // Get title - prioritize metadata title
+                $title = $metadata['title'] ?? get_the_title();
+                if ($title === 'Auto Draft' || empty($title)) {
+                    $title = $report_data['input_type'] === 'url' ? $url : $report_data['input_value'];
+                }
+                
+                // Clean up title - remove site names
+                if ($title && $title !== $url) {
+                    $title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $title);
+                    $title = trim($title);
+                    // Limit length
+                    if (mb_strlen($title) > 120) {
+                        $title = mb_substr($title, 0, 117) . '...';
                     }
-                    
-                    // Get featured image
-                    $featured_image = '';
-                    if (has_post_thumbnail()) {
-                        $featured_image = get_the_post_thumbnail_url(get_the_ID(), 'medium');
+                }
+                
+                $author = $metadata['author'] ?? '';
+                $date = $metadata['date'] ?? get_the_date('M j, Y');
+                $description = $metadata['description'] ?? $metadata['excerpt'] ?? '';
+                
+                // Get featured image - try post thumbnail first, then og:image from scraped content
+                $featured_image = '';
+                if (has_post_thumbnail()) {
+                    $featured_image = get_the_post_thumbnail_url(get_the_ID(), 'medium');
+                } elseif (!empty($report_data['scraped_content'])) {
+                    // Try to extract og:image from scraped content
+                    if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']/i', $report_data['scraped_content'], $match)) {
+                        $featured_image = $match[1];
                     }
+                }
                 ?>
                 
                 <!-- Source Article Card -->
@@ -237,29 +257,39 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                     <div class="source-article-content">
                         <?php if ($featured_image): ?>
                         <div class="source-article-image">
-                            <img src="<?php echo esc_url($featured_image); ?>" alt="<?php echo esc_attr($title); ?>">
+                            <img src="<?php echo esc_url($featured_image); ?>" alt="<?php echo esc_attr($title); ?>" onerror="this.parentElement.style.display='none'">
                         </div>
                         <?php endif; ?>
                         
                         <div class="source-article-main">
                             <div class="source-article-info">
+                                <?php if (filter_var($url, FILTER_VALIDATE_URL)): ?>
                                 <a href="<?php echo esc_url($url); ?>" class="source-title-link" target="_blank" rel="noopener noreferrer">
                                     <h4 class="source-title"><?php echo esc_html($title); ?></h4>
                                 </a>
-                                <?php if (!empty($excerpt)): ?>
-                                <p class="source-excerpt"><?php echo esc_html($excerpt); ?></p>
+                                <?php else: ?>
+                                <h4 class="source-title"><?php echo esc_html($title); ?></h4>
                                 <?php endif; ?>
+                                
+                                <?php if (!empty($description)): ?>
+                                <p class="source-excerpt"><?php echo esc_html(wp_trim_words($description, 25)); ?></p>
+                                <?php endif; ?>
+                                
                                 <div class="source-meta">
+                                    <?php if (!empty($favicon_url)): ?>
                                     <span class="source-favicon-inline">
                                         <img src="<?php echo esc_url($favicon_url); ?>" alt="<?php echo esc_attr($domain); ?>" onerror="this.style.display='none'">
                                     </span>
-                                    <span class="source-domain"><?php echo esc_html($domain); ?></span>
-                                    <?php if (!empty($author)): ?>
-                                    <span class="source-separator">•</span>
-                                    <span class="source-author"><?php echo esc_html($author); ?></span>
                                     <?php endif; ?>
+                                    <?php if (!empty($domain)): ?>
+                                    <span class="source-domain"><?php echo esc_html($domain); ?></span>
                                     <span class="source-separator">•</span>
-                                    <span class="source-date"><?php echo esc_html($date ?: get_the_date('M j, Y')); ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($author)): ?>
+                                    <span class="source-author"><?php echo esc_html($author); ?></span>
+                                    <span class="source-separator">•</span>
+                                    <?php endif; ?>
+                                    <span class="source-date"><?php echo esc_html($date); ?></span>
                                 </div>
                             </div>
                         </div>
@@ -286,7 +316,6 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                     </div>
                 </div>
                 
-                <?php endif; ?>
                 
                 <!-- Score Card -->
                 <div class="report-score-card">
@@ -312,9 +341,11 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                         <div class="score-circle <?php echo esc_attr($score_class); ?>">
                             <svg class="score-ring" width="200" height="200">
                                 <circle cx="100" cy="100" r="90" stroke="#e5e5e5" stroke-width="12" fill="none"></circle>
-                                <circle cx="100" cy="100" r="90" stroke-width="12" fill="none" stroke-linecap="round" 
+                                <circle cx="100" cy="100" r="90" 
+                                        stroke="<?php echo $score >= 75 ? '#10b981' : ($score >= 50 ? '#3b82f6' : ($score >= 30 ? '#f59e0b' : '#ef4444')); ?>" 
+                                        stroke-width="12" fill="none" stroke-linecap="round" 
                                         transform="rotate(-90 100 100)" 
-                                        style="stroke-dasharray: <?php echo $circumference; ?>; stroke-dashoffset: <?php echo $offset; ?>;"></circle>
+                                        style="stroke-dasharray: <?php echo $circumference; ?>; stroke-dashoffset: <?php echo $offset; ?>; transition: stroke-dashoffset 1s ease;"></circle>
                             </svg>
                             <div class="score-number">
                                 <span><?php echo esc_html($score); ?></span>

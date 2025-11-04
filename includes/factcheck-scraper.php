@@ -44,7 +44,7 @@ class AI_Verify_Factcheck_Scraper {
             return $result;
         }
 
-        return self::parse_content($result['content'], $result['title'], $url);
+        return self::parse_content($result, $url);
     }
 
     /**
@@ -164,7 +164,7 @@ class AI_Verify_Factcheck_Scraper {
     }
 
     /**
-     * Firecrawl (keep as backup option)
+     * Firecrawl (keep as backup option) - IMPROVED metadata extraction
      */
     private static function scrape_with_firecrawl($url) {
         $api_key = get_option('ai_verify_firecrawl_key');
@@ -174,6 +174,89 @@ class AI_Verify_Factcheck_Scraper {
 
         error_log('AI Verify: Using Firecrawl for: ' . $url);
 
+        // Try v1 API first (has better metadata)
+        $api_url = 'https://api.firecrawl.dev/v1/scrape';
+        
+        $response = wp_remote_post($api_url, array(
+            'method'  => 'POST',
+            'timeout' => 120,
+            'headers' => array(
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ),
+            'body'    => json_encode(array(
+                'url' => $url,
+                'formats' => array('markdown', 'html'),
+                'onlyMainContent' => true
+            )),
+        ));
+
+        if (is_wp_error($response)) {
+            error_log('AI Verify: Firecrawl v1 failed, trying v0: ' . $response->get_error_message());
+            // Fallback to v0
+            return self::scrape_with_firecrawl_v0($url, $api_key);
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $response_code = wp_remote_retrieve_response_code($response);
+
+        if ($response_code !== 200 || empty($body['data'])) {
+            error_log('AI Verify: Firecrawl v1 bad response, trying v0');
+            return self::scrape_with_firecrawl_v0($url, $api_key);
+        }
+
+        $data = $body['data'];
+        $metadata = $data['metadata'] ?? array();
+        $markdown = $data['markdown'] ?? '';
+        $html = $data['html'] ?? '';
+        
+        // Extract comprehensive metadata
+        $title = $metadata['title'] ?? $metadata['ogTitle'] ?? '';
+        $description = $metadata['description'] ?? $metadata['ogDescription'] ?? '';
+        $author = $metadata['author'] ?? $metadata['ogSiteName'] ?? '';
+        $date = $metadata['publishedTime'] ?? $metadata['modifiedTime'] ?? '';
+        
+        // Get featured image from multiple sources
+        $featured_image = '';
+        if (!empty($metadata['ogImage'])) {
+            $featured_image = is_array($metadata['ogImage']) ? ($metadata['ogImage'][0]['url'] ?? '') : $metadata['ogImage'];
+        }
+        if (empty($featured_image) && !empty($html)) {
+            // Extract from HTML as fallback
+            if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']/i', $html, $match)) {
+                $featured_image = $match[1];
+            }
+        }
+        
+        // Clean title
+        if (!empty($title)) {
+            $title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $title);
+            $title = trim($title);
+        }
+        
+        // Format date
+        if (!empty($date)) {
+            $date = date('M j, Y', strtotime($date));
+        }
+        
+        $content = self::smart_filter($markdown, $url);
+        
+        error_log('AI Verify: Firecrawl success - Title: ' . substr($title, 0, 50) . ', Image: ' . ($featured_image ? 'YES' : 'NO'));
+
+        return array(
+            'title'   => $title ?: 'Untitled',
+            'content' => $content,
+            'description' => $description,
+            'featured_image' => $featured_image,
+            'author' => $author,
+            'date' => $date
+        );
+    }
+    
+    /**
+     * Firecrawl v0 fallback
+     */
+    private static function scrape_with_firecrawl_v0($url, $api_key) {
         $api_url = 'https://api.firecrawl.dev/v0/scrape';
         
         $response = wp_remote_post($api_url, array(
@@ -208,7 +291,11 @@ class AI_Verify_Factcheck_Scraper {
 
         return array(
             'title'   => $body['data']['metadata']['title'] ?? 'Untitled',
-            'content' => $content
+            'content' => $content,
+            'description' => '',
+            'featured_image' => '',
+            'author' => '',
+            'date' => ''
         );
     }
     
@@ -379,34 +466,48 @@ class AI_Verify_Factcheck_Scraper {
         return trim($filtered);
     }
     
-    private static function parse_content($markdown, $title, $original_url) {
-        $author = self::extract_author($markdown);
-        $date = self::extract_date($markdown);
-        $content = self::clean_markdown($markdown);
-        $paragraphs = self::extract_paragraphs($content);
-        $word_count = str_word_count(strip_tags($content));
+    private static function parse_content($scrape_result, $original_url) {
+        $title = $scrape_result['title'] ?? 'Untitled';
+        $content = $scrape_result['content'] ?? '';
+        $description = $scrape_result['description'] ?? '';
+        $featured_image = $scrape_result['featured_image'] ?? '';
+        $author = $scrape_result['author'] ?? '';
+        $date = $scrape_result['date'] ?? '';
         
-        // Extract excerpt safely for display
-        $excerpt = '';
-        if (!empty($paragraphs)) {
+        // If no author/date from scraper, try to extract from content
+        if (empty($author)) {
+            $author = self::extract_author($content);
+        }
+        if (empty($date)) {
+            $date = self::extract_date($content);
+        }
+        
+        $clean_content = self::clean_markdown($content);
+        $paragraphs = self::extract_paragraphs($clean_content);
+        $word_count = str_word_count(strip_tags($clean_content));
+        
+        // Extract excerpt - prefer description from metadata
+        $excerpt = $description;
+        if (empty($excerpt) && !empty($paragraphs)) {
             $excerpt = mb_substr($paragraphs[0], 0, 200);
             if (mb_strlen($paragraphs[0]) > 200) {
                 $excerpt .= '...';
             }
         }
         
-        error_log("AI Verify: Final - {$word_count} words, " . count($paragraphs) . " paragraphs");
-        error_log("AI Verify: Metadata - Title: {$title}, Author: " . ($author ?: 'Unknown') . ", Date: " . ($date ?: 'Unknown'));
+        error_log("AI Verify: Final - {$word_count} words, Title: " . substr($title, 0, 50) . ", Image: " . ($featured_image ? 'YES' : 'NO'));
         
         return array(
             'success' => true,
             'title' => $title,
-            'content' => $content,
+            'content' => $clean_content,
             'paragraphs' => $paragraphs,
             'author' => $author,
             'date' => $date,
             'word_count' => $word_count,
             'excerpt' => $excerpt,
+            'description' => $description,
+            'featured_image' => $featured_image,
             'url' => $original_url,
             'scraped_at' => current_time('mysql')
         );
