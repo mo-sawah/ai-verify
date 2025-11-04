@@ -425,9 +425,47 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
         // Ensure it's a string
         $explanation = (string) $explanation;
         
-        // Clean any remaining JSON-like structures
-        if (preg_match('/^\s*[\{\[]/', $explanation)) {
-            $explanation = 'Explanation could not be parsed properly.';
+        // CRITICAL: Check for JSON-like content in explanation
+        $trimmed_exp = trim($explanation);
+        if (preg_match('/^\s*[\{\[]/', $trimmed_exp) || 
+            strpos($trimmed_exp, '"evidence_for"') !== false || 
+            strpos($trimmed_exp, '"evidence_against"') !== false ||
+            strpos($trimmed_exp, '"red_flags"') !== false) {
+            
+            error_log('AI Verify: Explanation contains JSON structure, attempting to extract text');
+            
+            // Try to decode nested JSON
+            $nested = json_decode($trimmed_exp, true);
+            if (is_array($nested) && isset($nested['explanation'])) {
+                $explanation = (string) $nested['explanation'];
+            } else {
+                // Extract any readable sentences
+                $sentences = preg_split('/(?<=[.!?])\s+/', $explanation);
+                $clean_sentences = array();
+                foreach ($sentences as $sentence) {
+                    // Skip JSON-like lines
+                    if (!preg_match('/[{}\[\]"]|evidence_|red_flags|confidence/', $sentence)) {
+                        $clean_sentences[] = trim($sentence);
+                    }
+                }
+                
+                if (!empty($clean_sentences)) {
+                    $explanation = implode(' ', $clean_sentences);
+                } else {
+                    $explanation = 'The explanation could not be properly formatted due to data structure issues.';
+                }
+            }
+        }
+        
+        // Clean up any remaining JSON fragments
+        $explanation = preg_replace('/\{[^}]*\}/', '', $explanation);
+        $explanation = preg_replace('/\[[^\]]*\]/', '', $explanation);
+        $explanation = preg_replace('/"(?:evidence_for|evidence_against|red_flags|confidence)":\s*[^,}]*,?/', '', $explanation);
+        
+        // Final cleanup
+        $explanation = trim($explanation);
+        if (strlen($explanation) < 20) {
+            $explanation = 'No detailed explanation available for this claim.';
         }
         
         error_log('AI Verify: Successfully parsed - Rating: ' . ($result['rating'] ?? 'none') . ', Explanation length: ' . strlen($explanation));
@@ -472,14 +510,47 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
             $rating = ucwords(strtolower($rating_match[1]));
         }
         
-        // Extract explanation (remove JSON-like structures)
+        // Extract explanation - be very aggressive about removing JSON
         $explanation = strip_tags($content);
-        $explanation = preg_replace('/\{[^}]+\}/', '', $explanation);
-        $explanation = preg_replace('/\[[^\]]+\]/', '', $explanation);
+        
+        // Remove all JSON structures
+        $explanation = preg_replace('/\{[^}]*\}/s', '', $explanation);
+        $explanation = preg_replace('/\[[^\]]*\]/s', '', $explanation);
+        
+        // Remove JSON-like key-value pairs
+        $explanation = preg_replace('/"[^"]*":\s*"[^"]*"/s', '', $explanation);
+        $explanation = preg_replace('/"[^"]*":\s*\d+\.?\d*/s', '', $explanation);
+        $explanation = preg_replace('/"[^"]*":\s*\[/s', '', $explanation);
+        
+        // Remove specific field names
+        $json_fields = array('rating', 'explanation', 'sources', 'evidence_for', 'evidence_against', 'red_flags', 'confidence');
+        foreach ($json_fields as $field) {
+            $explanation = str_replace('"' . $field . '"', '', $explanation);
+            $explanation = str_replace($field . ':', '', $explanation);
+        }
+        
+        // Clean up commas, brackets, quotes
+        $explanation = str_replace(array('{', '}', '[', ']', '"', ',', ':', '  '), ' ', $explanation);
+        
+        // Extract only complete sentences
+        $sentences = preg_split('/(?<=[.!?])\s+/', $explanation);
+        $valid_sentences = array();
+        
+        foreach ($sentences as $sentence) {
+            $sentence = trim($sentence);
+            // Keep sentences that are at least 20 chars and don't look like JSON
+            if (strlen($sentence) >= 20 && 
+                !preg_match('/^[0-9.]+$/', $sentence) &&
+                str_word_count($sentence) >= 5) {
+                $valid_sentences[] = $sentence;
+            }
+        }
+        
+        $explanation = implode(' ', $valid_sentences);
         $explanation = trim($explanation);
         
         if (empty($explanation) || strlen($explanation) < 50) {
-            $explanation = 'Unable to provide detailed analysis due to parsing error.';
+            $explanation = 'Unable to provide detailed analysis. The claim verification was attempted but the response format was invalid.';
         }
         
         return array(

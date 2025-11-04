@@ -8,6 +8,76 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * CRITICAL FIX: Validate and clean explanation text to prevent JSON display
+ */
+function ai_verify_clean_explanation($explanation) {
+    if (empty($explanation)) {
+        return 'No explanation available.';
+    }
+    
+    // If explanation is not a string, convert it
+    if (is_array($explanation)) {
+        $explanation = implode("\n\n", array_filter($explanation, 'is_string'));
+    } elseif (is_object($explanation)) {
+        return 'Explanation data is invalid.';
+    }
+    
+    // Convert to string
+    $explanation = (string) $explanation;
+    
+    // Check if it looks like JSON
+    $trimmed = trim($explanation);
+    if (preg_match('/^\s*[\{\[]/', $trimmed) || 
+        strpos($trimmed, '"evidence_for"') !== false || 
+        strpos($trimmed, '"evidence_against"') !== false ||
+        strpos($trimmed, '"red_flags"') !== false ||
+        strpos($trimmed, '"confidence"') !== false) {
+        
+        // This is JSON or JSON-like text, try to extract real content
+        // Try to decode it
+        $decoded = json_decode($trimmed, true);
+        if (is_array($decoded) && isset($decoded['explanation'])) {
+            return ai_verify_clean_explanation($decoded['explanation']);
+        }
+        
+        // If that didn't work, try to extract text content
+        $text_parts = array();
+        
+        // Extract any readable text between quotes that's not a key
+        if (preg_match_all('/"(?:explanation|text|content|details)":\s*"([^"]+)"/s', $explanation, $matches)) {
+            foreach ($matches[1] as $match) {
+                $text_parts[] = $match;
+            }
+        }
+        
+        if (!empty($text_parts)) {
+            return implode("\n\n", $text_parts);
+        }
+        
+        // Last resort - just say we couldn't parse it
+        return 'The explanation could not be properly formatted. The claim verification was attempted but the explanation data is malformed.';
+    }
+    
+    // Clean up any remaining JSON fragments
+    $explanation = preg_replace('/\{[^}]*\}/', '', $explanation);
+    $explanation = preg_replace('/\[[^\]]*\]/', '', $explanation);
+    
+    // Remove JSON-like keys
+    $explanation = preg_replace('/"(?:evidence_for|evidence_against|red_flags|confidence|sources)":\s*[^,}]*,?/', '', $explanation);
+    
+    // Clean up whitespace
+    $explanation = preg_replace('/\s+/', ' ', $explanation);
+    $explanation = trim($explanation);
+    
+    // If we ended up with nothing or very little, provide fallback
+    if (strlen($explanation) < 20) {
+        return 'No detailed explanation available for this claim.';
+    }
+    
+    return $explanation;
+}
+
 get_header();
 
 // Get report data from post meta
@@ -519,7 +589,7 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                                     <?php echo esc_html($claim['claim']); ?>
                                 </div>
                                 <div class="claim-explanation">
-                                    <?php echo wp_kses_post(wpautop($claim['explanation'] ?? 'No explanation available')); ?>
+                                    <?php echo wp_kses_post(wpautop(ai_verify_clean_explanation($claim['explanation'] ?? ''))); ?>
                                 </div>
                                 
                                 <?php if (!empty($claim['sources']) && is_array($claim['sources'])): ?>
