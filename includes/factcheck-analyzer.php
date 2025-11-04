@@ -1,13 +1,12 @@
 <?php
 /**
- * OPTIMIZED Claim Extraction and Analysis Engine
- * * IMPROVEMENTS:
- * - Perplexity uses built-in search (no redundant Firecrawl calls)
- * - Added Tavily integration as alternative to Firecrawl
- * - Improved OpenRouter web search strategy
- * - Fixed scoring logic (unverified = neutral, not penalty)
+ * OPTIMIZED Claim Extraction and Analysis Engine - ENHANCED
+ * IMPROVEMENTS:
+ * - FIXED UTF-8 encoding bug that was breaking OpenRouter API
+ * - Enhanced claim extraction with better prompts
+ * - Detailed multi-paragraph analysis citing all 5 sources
+ * - Comprehensive fact-checking workflow
  * - Better error handling and fallbacks
- * - More accurate source attribution
  */
 
 if (!defined('ABSPATH')) {
@@ -17,26 +16,62 @@ if (!defined('ABSPATH')) {
 class AI_Verify_Factcheck_Analyzer {
     
     /**
-     * Safe JSON encode that never returns boolean
+     * FIXED: Safe JSON encode that cleans UTF-8 BEFORE encoding
+     * This fixes the malformed UTF-8 bug from Tavily results
      */
     private static function safe_json_encode($data) {
-        $json = json_encode($data);
+        // CRITICAL FIX: Clean UTF-8 recursively before encoding
+        $data = self::clean_utf8_recursive($data);
+        
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
         if ($json === false) {
             error_log('AI Verify: json_encode failed - ' . json_last_error_msg());
-            // Return empty JSON object as fallback
-            return '{}';
+            // Last resort: try with basic encoding
+            $json = json_encode($data);
+            if ($json === false) {
+                return '{}';
+            }
         }
+        
         return $json;
     }
     
     /**
-     * Extract claims using AI (ClaimBuster removed - not working)
+     * NEW: Clean UTF-8 recursively to fix encoding issues
+     */
+    private static function clean_utf8_recursive($data) {
+        if (is_string($data)) {
+            // Remove invalid UTF-8 sequences
+            $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+            // Remove any remaining problematic characters
+            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $data);
+            return $data;
+        }
+        
+        if (is_array($data)) {
+            foreach ($data as $key => $value) {
+                $data[$key] = self::clean_utf8_recursive($value);
+            }
+        }
+        
+        if (is_object($data)) {
+            foreach ($data as $key => $value) {
+                $data->$key = self::clean_utf8_recursive($value);
+            }
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * ENHANCED: Extract claims with better AI prompt
      */
     public static function extract_claims($content) {
         error_log('AI Verify: Starting AI-based claim extraction...');
         
         // Use AI-based extraction as primary method
-        $claims = self::extract_with_ai($content);
+        $claims = self::extract_with_ai_enhanced($content);
         
         // Fallback to basic extraction if AI fails
         if (empty($claims)) {
@@ -45,23 +80,21 @@ class AI_Verify_Factcheck_Analyzer {
         }
         
         error_log('AI Verify: Extracted ' . count($claims) . ' claims');
-        return array_slice($claims, 0, 15); // Max 15 claims
+        return array_slice($claims, 0, 10); // Max 10 claims for thorough analysis
     }
 
     /**
      * OPTIMIZED: Fact-check claims using best available method
-     * * Priority:
-     * 1. Google Fact Check API (existing fact-checks)
-     * 2. Perplexity AI with built-in search (recommended)
-     * 3. OpenRouter + Tavily/Firecrawl search (fallback)
      */
     public static function factcheck_claims($claims, $context = '', $url = '') {
         $results = array();
-        $api_provider = get_option('ai_verify_factcheck_provider', 'perplexity');
+        $api_provider = get_option('ai_verify_factcheck_provider', 'openrouter');
         
         error_log('AI Verify: Fact-checking ' . count($claims) . ' claims using ' . $api_provider);
         
-        foreach ($claims as $claim) {
+        foreach ($claims as $index => $claim) {
+            error_log('AI Verify: Checking claim ' . ($index + 1) . '/' . count($claims));
+            
             $result = array(
                 'claim' => $claim['text'],
                 'type' => $claim['type'] ?? 'general',
@@ -87,7 +120,7 @@ class AI_Verify_Factcheck_Analyzer {
                     $result['confidence'] = 0.95;
                     $result['method'] = 'Google Fact Check';
                     $results[] = $result;
-                    continue; // Skip to next claim
+                    continue;
                 }
             }
             
@@ -95,7 +128,8 @@ class AI_Verify_Factcheck_Analyzer {
             if ($api_provider === 'perplexity') {
                 $ai_result = self::check_with_perplexity_optimized($claim['text'], $context);
             } else {
-                $ai_result = self::check_with_openrouter_optimized($claim['text'], $context);
+                // MAIN PATH: OpenRouter with Tavily (most common)
+                $ai_result = self::check_with_openrouter_enhanced($claim['text'], $context);
             }
             
             if (!is_wp_error($ai_result) && !empty($ai_result)) {
@@ -108,7 +142,7 @@ class AI_Verify_Factcheck_Analyzer {
                 $result['red_flags'] = $ai_result['red_flags'] ?? array();
                 $result['method'] = $api_provider === 'perplexity' 
                     ? 'Perplexity AI Analysis' 
-                    : 'AI Analysis';
+                    : 'AI Analysis + Web Search';
             } else {
                 $result['rating'] = 'Unverified';
                 $result['explanation'] = 'Unable to verify this claim with available sources.';
@@ -124,20 +158,17 @@ class AI_Verify_Factcheck_Analyzer {
     
     /**
      * OPTIMIZED: Check claim with Perplexity AI (NO redundant search)
-     * * Perplexity's sonar models have BUILT-IN web search, so we don't need
-     * to call Firecrawl separately. Just call Perplexity directly.
      */
     private static function check_with_perplexity_optimized($claim, $context) {
         $api_key = get_option('ai_verify_perplexity_key');
         
         if (empty($api_key)) {
             error_log('AI Verify: Perplexity API key not configured');
-            return self::check_with_openrouter_optimized($claim, $context);
+            return self::check_with_openrouter_enhanced($claim, $context);
         }
         
         error_log('AI Verify: Checking with Perplexity (built-in search): ' . substr($claim, 0, 100));
         
-        // Direct prompt - Perplexity will search the web automatically
         $prompt = "You are a professional fact-checker. Verify this claim by searching the web thoroughly.
 
 Claim: {$claim}
@@ -146,7 +177,7 @@ Context: {$context}
 Search the web for credible sources and provide a comprehensive fact-check in JSON format:
 {
     \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
-    \"explanation\": \"detailed explanation citing specific sources\",
+    \"explanation\": \"3-5 paragraph detailed explanation citing all sources you found\",
     \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
     \"evidence_for\": [\"evidence supporting the claim\"],
     \"evidence_against\": [\"evidence contradicting the claim\"],
@@ -155,20 +186,20 @@ Search the web for credible sources and provide a comprehensive fact-check in JS
 }
 
 IMPORTANT:
+- Provide 3-5 paragraphs of detailed analysis
+- Cite ALL sources you find (minimum 3-5 sources)
+- Explain what the article claims vs what sources say
 - Rate as \"True\" only if strong evidence supports it
-- Rate as \"False\" if evidence contradicts it  
-- Rate as \"Unverified\" only if truly no reliable sources found
-- Always cite specific URLs in sources array
-- Confidence should reflect quality of sources (0.9+ for government/academic, 0.7+ for news)";
+- Always include specific URLs in sources array";
         
         $request_body = array(
-            'model' => 'sonar-pro', // Built-in web search
+            'model' => 'sonar-pro',
             'messages' => array(
-                array('role' => 'system', 'content' => 'You are a fact-checker. Always search the web and return valid JSON with evidence-based ratings.'),
+                array('role' => 'system', 'content' => 'You are a fact-checker. Always search the web and return valid JSON with comprehensive multi-paragraph analysis citing all sources.'),
                 array('role' => 'user', 'content' => $prompt)
             ),
             'temperature' => 0.2,
-            'max_tokens' => 2000
+            'max_tokens' => 3000
         );
         
         $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
@@ -182,16 +213,15 @@ IMPORTANT:
         
         if (is_wp_error($response)) {
             error_log('AI Verify: Perplexity error: ' . $response->get_error_message());
-            return self::check_with_openrouter_optimized($claim, $context);
+            return self::check_with_openrouter_enhanced($claim, $context);
         }
         
         $status_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
         
         if ($status_code !== 200) {
-            // More detailed error logging
-            error_log('AI Verify: Perplexity failed - Status ' . $status_code . ' | Response: ' . $body);
-            return self::check_with_openrouter_optimized($claim, $context);
+            error_log('AI Verify: Perplexity failed - Status ' . $status_code . ' | Response: ' . substr($body, 0, 200));
+            return self::check_with_openrouter_enhanced($claim, $context);
         }
         
         $data = json_decode($body, true);
@@ -199,7 +229,6 @@ IMPORTANT:
         
         $result = self::parse_fact_check_response($content);
         
-        // Manually find sources from the explanation text if possible, as citations metadata is not available this way
         if (empty($result['sources'])) {
             $found_sources = [];
             preg_match_all('/https?:\/\/[^\s)]+/', $result['explanation'], $matches);
@@ -218,10 +247,10 @@ IMPORTANT:
     }
     
     /**
-     * OPTIMIZED: Check claim with OpenRouter + Smart Web Search
-     * * Strategy: Try Tavily first (AI-optimized), fallback to Firecrawl
+     * ENHANCED: Check claim with OpenRouter + Detailed Multi-Source Analysis
+     * This is the main method - now provides 3-5 paragraph analysis citing all 5 Tavily sources
      */
-    private static function check_with_openrouter_optimized($claim, $context) {
+    private static function check_with_openrouter_enhanced($claim, $context) {
         $api_key = get_option('ai_verify_openrouter_key');
         
         if (empty($api_key)) {
@@ -232,10 +261,10 @@ IMPORTANT:
         
         error_log('AI Verify: Using OpenRouter + Web Search: ' . substr($claim, 0, 100));
         
-        // STEP 1: Try Tavily first (recommended for AI fact-checking)
+        // STEP 1: Get web search results from Tavily
         $web_results = self::search_web_tavily($claim);
         
-        // Fallback to Firecrawl if Tavily not available/failed
+        // Fallback to Firecrawl if Tavily fails
         if (empty($web_results)) {
             error_log('AI Verify: Tavily unavailable, trying Firecrawl');
             $web_results = self::search_web_firecrawl($claim);
@@ -251,45 +280,73 @@ IMPORTANT:
             );
         }
         
-        // STEP 2: Build rich context from search results
-        $web_context = "\n\n=== WEB SEARCH RESULTS ===\n";
+        // STEP 2: Build comprehensive context from ALL search results
+        $web_context = "\n\n=== WEB SEARCH RESULTS (ANALYZE ALL SOURCES) ===\n";
         foreach ($web_results as $idx => $result) {
-            $content_preview = substr($result['content'], 0, 600);
             $web_context .= "\n[Source " . ($idx + 1) . "]\n";
             $web_context .= "Title: {$result['title']}\n";
             $web_context .= "URL: {$result['url']}\n";
-            $web_context .= "Content: {$content_preview}...\n";
-            $web_context .= "---\n";
+            $web_context .= "Content: {$result['content']}\n";
+            $web_context .= "---\n\n";
         }
         
-        // STEP 3: Ask AI to analyze with web context
-        $prompt = "You are a professional fact-checker. Analyze this claim using the web search results provided.
+        // STEP 3: ENHANCED PROMPT - Requires detailed multi-paragraph analysis
+        $prompt = "You are a professional investigative fact-checker. Analyze this claim using ALL the web search results provided below.
 
-Claim: {$claim}
-Original Context: {$context}
+Claim to Verify: {$claim}
+
+Article Context: {$context}
+
 {$web_context}
 
-Based on the web search results above, provide a detailed fact-check in JSON format:
+Your task is to provide a COMPREHENSIVE fact-check report analyzing ALL " . count($web_results) . " sources above. Return valid JSON:
+
 {
     \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
-    \"explanation\": \"detailed explanation citing specific sources by number\",
+    \"explanation\": \"DETAILED 3-5 paragraph analysis (see requirements below)\",
     \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
-    \"evidence_for\": [\"evidence supporting the claim from sources\"],
-    \"evidence_against\": [\"evidence contradicting the claim from sources\"],
-    \"red_flags\": [\"propaganda techniques or logical fallacies detected\"],
+    \"evidence_for\": [\"specific evidence supporting the claim from sources\"],
+    \"evidence_against\": [\"specific evidence contradicting the claim from sources\"],
+    \"red_flags\": [\"propaganda techniques or logical fallacies if detected\"],
     \"confidence\": 0.85
 }
 
-CRITICAL INSTRUCTIONS:
-- Base rating ONLY on the web search results provided
-- Cite sources by [Source X] in your explanation
-- If search results strongly support claim → \"True\" or \"Mostly True\"
-- If search results contradict claim → \"False\" or \"Mostly False\"
-- If results are mixed → \"Misleading\" or \"Mixture\"
-- ONLY use \"Unverified\" if search results don't address the claim
-- Confidence based on source quality: 0.9+ (govt/academic), 0.7-0.9 (major news), 0.5-0.7 (other)
-- Always include the most relevant source URLs from above";
+CRITICAL REQUIREMENTS FOR THE EXPLANATION (3-5 paragraphs minimum):
+
+Paragraph 1: WHAT THE CLAIM SAYS
+- Clearly state what the article is claiming
+- Identify the specific facts being asserted
+- Note any context or qualifiers in the claim
+
+Paragraph 2-4: WHAT EACH SOURCE SAYS (analyze ALL sources)
+- Go through each of the " . count($web_results) . " sources above
+- For each source, explain what it says about this claim
+- Cite sources as [Source 1], [Source 2], etc.
+- Note agreements and contradictions between sources
+- Evaluate source credibility (government, academic, news, blog, etc.)
+
+Final Paragraph: CONCLUSION
+- Synthesize all evidence
+- Explain WHY you gave this rating
+- Note any nuances, caveats, or missing context
+- State confidence level and reasoning
+
+RATING GUIDELINES:
+- \"True\" - Strong evidence from multiple credible sources confirms the claim
+- \"Mostly True\" - Claim is essentially accurate but lacks minor details or context
+- \"Misleading\" - Claim is technically true but presented in a misleading way
+- \"Mostly False\" - Claim contains some truth but is fundamentally wrong
+- \"False\" - Strong evidence directly contradicts the claim
+- \"Unverified\" - Insufficient evidence to make determination (use rarely)
+
+QUALITY STANDARDS:
+- Minimum 3 paragraphs, ideally 4-5 paragraphs
+- Cite EVERY source by number [Source X]
+- Include ALL source URLs in the sources array
+- Be specific - quote key facts from sources
+- Confidence: 0.9+ (govt/academic), 0.7-0.9 (major news), 0.5-0.7 (blogs/opinion)";
         
+        // STEP 4: Call OpenRouter with cleaned, comprehensive context
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
@@ -300,13 +357,13 @@ CRITICAL INSTRUCTIONS:
             'body' => self::safe_json_encode(array(
                 'model' => $model,
                 'messages' => array(
-                    array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON with evidence-based ratings using provided search results.'),
+                    array('role' => 'system', 'content' => 'You are an expert fact-checker. Provide comprehensive multi-paragraph analysis citing all provided sources. Always return valid JSON.'),
                     array('role' => 'user', 'content' => $prompt)
                 ),
                 'temperature' => 0.2,
-                'max_tokens' => 2000
+                'max_tokens' => 3000
             )),
-            'timeout' => 90
+            'timeout' => 120
         ));
         
         if (is_wp_error($response)) {
@@ -323,7 +380,7 @@ CRITICAL INSTRUCTIONS:
         $body_text = wp_remote_retrieve_body($response);
         
         if ($status_code !== 200) {
-            error_log('AI Verify: OpenRouter API error - Status ' . $status_code . ' | Body: ' . $body_text);
+            error_log('AI Verify: OpenRouter API error - Status ' . $status_code . ' | Body: ' . substr($body_text, 0, 300));
             return array(
                 'rating' => 'Unverified',
                 'explanation' => 'API error. Check API key and credits.',
@@ -337,18 +394,22 @@ CRITICAL INSTRUCTIONS:
         
         $result = self::parse_fact_check_response($content);
         
-        // Ensure we have sources from search results
-        if (empty($result['sources'])) {
+        // Ensure we include all sources from search results
+        if (empty($result['sources']) || count($result['sources']) < count($web_results)) {
             $result['sources'] = array_map(function($r) {
-                return array('name' => $r['title'], 'url' => $r['url']);
-            }, array_slice($web_results, 0, 3));
+                return array(
+                    'name' => !empty($r['title']) ? $r['title'] : parse_url($r['url'], PHP_URL_HOST),
+                    'url' => $r['url']
+                );
+            }, $web_results);
         }
         
         return $result;
     }
 
     /**
-     * Search web using Tavily API (RECOMMENDED for AI fact-checking)
+     * Search web using Tavily API (MAIN METHOD)
+     * FIXED: Now properly handles UTF-8 encoding issues
      */
     public static function search_web_tavily($query) {
         $api_key = get_option('ai_verify_tavily_key');
@@ -367,12 +428,12 @@ CRITICAL INSTRUCTIONS:
             'body' => self::safe_json_encode(array(
                 'api_key' => $api_key,
                 'query' => $query,
-                'search_depth' => 'advanced', // Deep search for fact-checking
+                'search_depth' => 'advanced',
                 'include_answer' => true,
                 'include_raw_content' => false,
                 'max_results' => 5,
-                'include_domains' => array(), // Can whitelist trusted domains
-                'exclude_domains' => array() // Can blacklist unreliable sources
+                'include_domains' => array(),
+                'exclude_domains' => array()
             )),
             'timeout' => 30
         ));
@@ -391,10 +452,11 @@ CRITICAL INSTRUCTIONS:
         
         $results = array();
         foreach ($body['results'] as $result) {
+            // CRITICAL: Clean UTF-8 from Tavily results
             $results[] = array(
-                'title' => $result['title'] ?? '',
+                'title' => self::clean_utf8_recursive($result['title'] ?? ''),
                 'url' => $result['url'] ?? '',
-                'content' => $result['content'] ?? ''
+                'content' => self::clean_utf8_recursive($result['content'] ?? '')
             );
         }
         
@@ -452,9 +514,9 @@ CRITICAL INSTRUCTIONS:
         $results = array();
         foreach ($data['data'] as $item) {
             $results[] = array(
-                'title' => $item['title'] ?? '',
+                'title' => self::clean_utf8_recursive($item['title'] ?? ''),
                 'url' => $item['url'] ?? '',
-                'content' => $item['markdown'] ?? ($item['content'] ?? '')
+                'content' => self::clean_utf8_recursive($item['markdown'] ?? ($item['content'] ?? ''))
             );
         }
         
@@ -473,7 +535,7 @@ CRITICAL INSTRUCTIONS:
             $result = json_decode($matches[0], true);
             
             if ($result && isset($result['rating'])) {
-                error_log('AI Verify: Successfully parsed JSON result');
+                error_log('AI Verify: Successfully parsed JSON result - Explanation length: ' . strlen($result['explanation'] ?? ''));
                 
                 return array(
                     'rating' => $result['rating'] ?? 'Unverified',
@@ -602,15 +664,11 @@ CRITICAL INSTRUCTIONS:
     }
     
     /**
-     * FIXED: Calculate overall credibility score
-     * * CHANGES:
-     * - "Unverified" now = 0.5 (neutral), not penalized
-     * - Better weighting based on confidence
-     * - More balanced scoring
+     * Calculate overall credibility score
      */
     public static function calculate_overall_score($factcheck_results) {
         if (empty($factcheck_results)) {
-            return 50; // Neutral if no data
+            return 50;
         }
         
         $total_score = 0;
@@ -620,37 +678,34 @@ CRITICAL INSTRUCTIONS:
             $rating = strtolower($result['rating'] ?? 'unverified');
             $confidence = floatval($result['confidence'] ?? 0.5);
             
-            // Convert rating to score (0.0 to 1.0)
-            $score = 0.5; // default neutral
+            $score = 0.5;
             
             if (strpos($rating, 'true') !== false && strpos($rating, 'false') === false) {
-                $score = 1.0; // True
+                $score = 1.0;
             } elseif (strpos($rating, 'mostly true') !== false) {
-                $score = 0.75; // Mostly True
+                $score = 0.75;
             } elseif (strpos($rating, 'mixture') !== false || strpos($rating, 'misleading') !== false || strpos($rating, 'mixed') !== false) {
-                $score = 0.5; // Misleading/Mixed
+                $score = 0.5;
             } elseif (strpos($rating, 'mostly false') !== false) {
-                $score = 0.25; // Mostly False
+                $score = 0.25;
             } elseif (strpos($rating, 'false') !== false) {
-                $score = 0.0; // False
+                $score = 0.0;
             } elseif (strpos($rating, 'unverified') !== false || strpos($rating, 'unknown') !== false) {
-                $score = 0.5; // CHANGED: Neutral, not penalty
+                $score = 0.5;
             }
             
-            // Weight by confidence (higher confidence = more weight)
-            $weight = max($confidence, 0.3); // Minimum weight
+            $weight = max($confidence, 0.3);
             
             $total_score += $score * $weight;
             $total_weight += $weight;
         }
         
         if ($total_weight == 0) {
-            return 50; // Neutral
+            return 50;
         }
         
         $calculated_score = ($total_score / $total_weight) * 100;
         
-        // Round to 2 decimals
         return round($calculated_score, 2);
     }
     
@@ -667,11 +722,10 @@ CRITICAL INSTRUCTIONS:
     
     // ============ HELPER FUNCTIONS ============
     
-    
     /**
-     * Extract claims using AI (fallback)
+     * ENHANCED: Extract claims using AI with better prompts
      */
-    private static function extract_with_ai($content) {
+    private static function extract_with_ai_enhanced($content) {
         $api_key = get_option('ai_verify_openrouter_key');
         
         if (empty($api_key)) {
@@ -679,12 +733,35 @@ CRITICAL INSTRUCTIONS:
         }
         
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
-        $content = mb_substr($content, 0, 4000);
+        $content = mb_substr($content, 0, 6000);
         
-        $prompt = "Extract 10-15 verifiable factual claims from this article. Focus on specific statements that can be fact-checked. Return ONLY a JSON array:
-[{\"text\": \"claim\", \"score\": 0.9, \"type\": \"statistical\"}]
+        $prompt = "You are an expert fact-checker. Extract the 8-12 most significant, verifiable factual claims from this article.
 
-Article: {$content}";
+FOCUS ON:
+- Specific statistics, numbers, percentages
+- Names, dates, locations, events
+- Cause-and-effect relationships
+- Policy claims or legal statements
+- Scientific or health claims
+- Direct quotes from officials
+
+AVOID:
+- Opinions or subjective statements
+- Predictions about the future (unless from experts)
+- Vague generalizations
+- Rhetorical questions
+
+Return ONLY a JSON array in this format:
+[
+  {\"text\": \"The specific claim\", \"score\": 0.9, \"type\": \"statistical\"},
+  {\"text\": \"Another claim\", \"score\": 0.85, \"type\": \"quote\"}
+]
+
+Types: \"statistical\", \"quote\", \"causal\", \"policy\", \"scientific\", \"general\"
+Score: 0.0-1.0 (higher = more important/verifiable)
+
+Article:
+{$content}";
         
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
@@ -742,7 +819,7 @@ Article: {$content}";
             return $b['score'] <=> $a['score'];
         });
         
-        return array_slice($claims, 0, 15);
+        return array_slice($claims, 0, 10);
     }
     
     private static function split_sentences($text) {
@@ -802,6 +879,4 @@ Article: {$content}";
         
         return array_unique($keywords);
     }
-
-    
 }

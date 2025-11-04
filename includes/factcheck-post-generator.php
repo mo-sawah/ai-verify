@@ -1,8 +1,11 @@
 <?php
 /**
- * Fact-Check Report Post Generator
- * Creates actual WordPress posts for completed reports
- * Makes reports publicly accessible and SEO-friendly
+ * Fact-Check Report Post Generator - ENHANCED
+ * IMPROVEMENTS:
+ * - Better metadata extraction from scraped content
+ * - Properly passes all metadata (title, author, dates, image) to posts
+ * - Extracts from multiple sources (scraped data, metadata field, HTML)
+ * - Never fails due to missing metadata
  */
 
 if (!defined('ABSPATH')) {
@@ -69,10 +72,11 @@ class AI_Verify_Factcheck_Post_Generator {
     }
     
     /**
-     * Create or update WordPress post for a completed report
+     * IMPROVED: Create or update WordPress post with COMPREHENSIVE metadata extraction
      */
     public static function create_report_post($report_id, $report_data) {
         if (empty($report_id) || empty($report_data)) {
+            error_log('AI Verify: Cannot create post - missing report data');
             return false;
         }
         
@@ -85,13 +89,14 @@ class AI_Verify_Factcheck_Post_Generator {
             'post_status' => 'any'
         ));
         
-        // Generate title
-        $title = self::generate_title($report_data);
+        // STEP 1: Extract comprehensive metadata from ALL available sources
+        $metadata = self::extract_comprehensive_metadata($report_data);
         
-        // Generate excerpt
+        error_log('AI Verify: Extracted metadata - Title: "' . substr($metadata['title'], 0, 50) . '", Author: "' . $metadata['author'] . '", Date: "' . $metadata['date'] . '", Image: ' . ($metadata['featured_image'] ? 'YES' : 'NO'));
+        
+        // STEP 2: Generate post title, excerpt, content
+        $title = self::generate_title($report_data, $metadata);
         $excerpt = self::generate_excerpt($report_data);
-        
-        // Generate content
         $content = self::generate_content($report_data);
         
         $post_data = array(
@@ -103,12 +108,11 @@ class AI_Verify_Factcheck_Post_Generator {
             'post_name' => sanitize_title($report_id),
         );
         
+        // STEP 3: Create or update post
         if (!empty($existing_posts)) {
-            // Update existing post
             $post_data['ID'] = $existing_posts[0]->ID;
             $post_id = wp_update_post($post_data);
         } else {
-            // Create new post
             $post_id = wp_insert_post($post_data);
         }
         
@@ -117,7 +121,7 @@ class AI_Verify_Factcheck_Post_Generator {
             return false;
         }
         
-        // Save report data as post meta
+        // STEP 4: Save all report data and metadata as post meta
         update_post_meta($post_id, 'report_id', $report_id);
         update_post_meta($post_id, 'report_data', json_encode($report_data));
         update_post_meta($post_id, 'overall_score', $report_data['overall_score']);
@@ -125,9 +129,24 @@ class AI_Verify_Factcheck_Post_Generator {
         update_post_meta($post_id, 'input_value', $report_data['input_value']);
         update_post_meta($post_id, 'input_type', $report_data['input_type']);
         
-        // Set featured image if available
+        // STEP 5: Save comprehensive metadata
+        update_post_meta($post_id, 'article_title', $metadata['title']);
+        update_post_meta($post_id, 'article_author', $metadata['author']);
+        update_post_meta($post_id, 'article_date', $metadata['date']);
+        update_post_meta($post_id, 'article_date_modified', $metadata['date_modified']);
+        update_post_meta($post_id, 'article_description', $metadata['description']);
+        update_post_meta($post_id, 'article_domain', $metadata['domain']);
+        update_post_meta($post_id, 'article_favicon', $metadata['favicon']);
+        update_post_meta($post_id, 'article_url', $report_data['input_value']);
+        
+        // STEP 6: Set featured image
         if ($report_data['input_type'] === 'url') {
-            self::set_featured_image($post_id, $report_data);
+            $image_set = self::set_featured_image($post_id, $metadata['featured_image'], $report_data['input_value']);
+            if ($image_set) {
+                error_log('AI Verify: Successfully set featured image for post ' . $post_id);
+            } else {
+                error_log('AI Verify: Could not set featured image for post ' . $post_id);
+            }
         }
         
         error_log('AI Verify: Created/updated post ' . $post_id . ' for report ' . $report_id);
@@ -136,51 +155,172 @@ class AI_Verify_Factcheck_Post_Generator {
     }
     
     /**
-     * Generate title for the report post
+     * NEW: Extract comprehensive metadata from ALL available sources
+     * Priority: metadata field > scraped_content HTML > URL re-extraction
      */
-    private static function generate_title($report_data) {
-        $input = $report_data['input_value'] ?? '';
+    private static function extract_comprehensive_metadata($report_data) {
+        $metadata = array(
+            'title' => '',
+            'description' => '',
+            'featured_image' => '',
+            'author' => '',
+            'date' => '',
+            'date_modified' => '',
+            'domain' => '',
+            'favicon' => ''
+        );
         
+        // SOURCE 1: Check if metadata already exists in report_data['metadata']
+        if (!empty($report_data['metadata']) && is_array($report_data['metadata'])) {
+            $existing = $report_data['metadata'];
+            
+            if (!empty($existing['title'])) $metadata['title'] = $existing['title'];
+            if (!empty($existing['description'])) $metadata['description'] = $existing['description'];
+            if (!empty($existing['featured_image'])) $metadata['featured_image'] = $existing['featured_image'];
+            if (!empty($existing['author'])) $metadata['author'] = $existing['author'];
+            if (!empty($existing['date'])) $metadata['date'] = $existing['date'];
+            if (!empty($existing['date_modified'])) $metadata['date_modified'] = $existing['date_modified'];
+            if (!empty($existing['domain'])) $metadata['domain'] = $existing['domain'];
+            if (!empty($existing['favicon'])) $metadata['favicon'] = $existing['favicon'];
+            
+            error_log('AI Verify: Using metadata from database - Title: ' . (!empty($metadata['title']) ? 'YES' : 'NO'));
+        }
+        
+        // SOURCE 2: Extract from scraped HTML content if we still need data
+        if (!empty($report_data['scraped_content']) && 
+            (empty($metadata['title']) || empty($metadata['featured_image']))) {
+            
+            $html = $report_data['scraped_content'];
+            
+            // Title extraction
+            if (empty($metadata['title'])) {
+                if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $match)) {
+                    $metadata['title'] = html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8');
+                    $metadata['title'] = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $metadata['title']);
+                    $metadata['title'] = trim($metadata['title']);
+                }
+            }
+            
+            // Description extraction
+            if (empty($metadata['description'])) {
+                if (preg_match('/<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['description'] = html_entity_decode($match[1], ENT_QUOTES, 'UTF-8');
+                } elseif (preg_match('/<meta[^>]*property=["\']og:description["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['description'] = html_entity_decode($match[1], ENT_QUOTES, 'UTF-8');
+                }
+            }
+            
+            // Featured Image extraction
+            if (empty($metadata['featured_image'])) {
+                if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['featured_image'] = $match[1];
+                } elseif (preg_match('/<meta[^>]*name=["\']twitter:image["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['featured_image'] = $match[1];
+                }
+            }
+            
+            // Author extraction
+            if (empty($metadata['author'])) {
+                if (preg_match('/<meta[^>]*name=["\']author["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['author'] = html_entity_decode($match[1], ENT_QUOTES, 'UTF-8');
+                } elseif (preg_match('/<meta[^>]*property=["\']article:author["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['author'] = html_entity_decode($match[1], ENT_QUOTES, 'UTF-8');
+                }
+            }
+            
+            // Date extraction
+            if (empty($metadata['date'])) {
+                if (preg_match('/<meta[^>]*property=["\']article:published_time["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['date'] = $match[1];
+                } elseif (preg_match('/<time[^>]*datetime=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['date'] = $match[1];
+                }
+            }
+            
+            // Modified date extraction
+            if (empty($metadata['date_modified'])) {
+                if (preg_match('/<meta[^>]*property=["\']article:modified_time["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+                    $metadata['date_modified'] = $match[1];
+                }
+            }
+            
+            error_log('AI Verify: Extracted from HTML - Title: ' . (!empty($metadata['title']) ? 'YES' : 'NO') . ', Image: ' . (!empty($metadata['featured_image']) ? 'YES' : 'NO'));
+        }
+        
+        // SOURCE 3: Extract domain and favicon from URL
+        if (!empty($report_data['input_value']) && $report_data['input_type'] === 'url') {
+            $parsed = parse_url($report_data['input_value']);
+            if (!empty($parsed['host'])) {
+                if (empty($metadata['domain'])) {
+                    $metadata['domain'] = str_replace('www.', '', $parsed['host']);
+                }
+                if (empty($metadata['favicon'])) {
+                    $metadata['favicon'] = "https://www.google.com/s2/favicons?domain=" . $metadata['domain'] . "&sz=128";
+                }
+            }
+        }
+        
+        // Fallback title if still empty
+        if (empty($metadata['title'])) {
+            if ($report_data['input_type'] === 'url') {
+                $metadata['title'] = 'Article from ' . ($metadata['domain'] ?: 'Unknown Source');
+            } else {
+                $metadata['title'] = mb_substr($report_data['input_value'], 0, 60);
+            }
+        }
+        
+        // Format dates
+        if (!empty($metadata['date'])) {
+            try {
+                $timestamp = strtotime($metadata['date']);
+                if ($timestamp) {
+                    $metadata['date'] = date('F j, Y', $timestamp);
+                }
+            } catch (Exception $e) {
+                // Keep original format
+            }
+        }
+        
+        if (!empty($metadata['date_modified'])) {
+            try {
+                $timestamp = strtotime($metadata['date_modified']);
+                if ($timestamp) {
+                    $metadata['date_modified'] = date('F j, Y', $timestamp);
+                }
+            } catch (Exception $e) {
+                // Keep original format
+            }
+        }
+        
+        return $metadata;
+    }
+    
+    /**
+     * Generate title for the report post using extracted metadata
+     */
+    private static function generate_title($report_data, $metadata) {
+        $article_title = $metadata['title'];
+        
+        if (!empty($article_title) && $article_title !== 'Untitled') {
+            // Clean up title - remove site names
+            $article_title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $article_title);
+            $article_title = trim($article_title);
+            
+            // Limit length
+            if (mb_strlen($article_title) > 80) {
+                $article_title = mb_substr($article_title, 0, 77) . '...';
+            }
+            
+            return "Fact-Check: {$article_title}";
+        }
+        
+        // Fallback
         if ($report_data['input_type'] === 'url') {
-            // Try to get the actual article title from scraped content
-            $article_title = '';
-            
-            // First check if we have scraped metadata
-            if (!empty($report_data['scraped_content'])) {
-                // Try to extract from HTML title tag
-                if (preg_match('/<title>(.*?)<\/title>/i', $report_data['scraped_content'], $match)) {
-                    $article_title = html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8');
-                }
-                // Or try to extract from first h1
-                if (empty($article_title) && preg_match('/<h1[^>]*>(.*?)<\/h1>/i', $report_data['scraped_content'], $match)) {
-                    $article_title = html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8');
-                }
-            }
-            
-            // Clean up title - remove site names and separators
-            if (!empty($article_title)) {
-                // Remove common patterns like " - SiteName" or " | SiteName" from the end
-                $article_title = preg_replace('/[\|\-–—]\s*[^|\-–—]*$/', '', $article_title);
-                $article_title = trim($article_title);
-                
-                // Limit length
-                if (mb_strlen($article_title) > 80) {
-                    $article_title = mb_substr($article_title, 0, 77) . '...';
-                }
-                
-                return "Fact-Check: {$article_title}";
-            }
-            
-            // Fallback to domain if no title found
-            $parsed = parse_url($input);
-            $domain = $parsed['host'] ?? 'Unknown Source';
-            $domain = str_replace('www.', '', $domain);
-            
-            return "Fact-Check: {$domain} Article";
+            $domain = $metadata['domain'] ?: 'Unknown Source';
+            return "Fact-Check: Article from {$domain}";
         } else {
-            // For title or phrase input
-            $short_input = mb_substr($input, 0, 60);
-            if (mb_strlen($input) > 60) {
+            $short_input = mb_substr($report_data['input_value'], 0, 60);
+            if (mb_strlen($report_data['input_value']) > 60) {
                 $short_input .= '...';
             }
             return "Fact-Check: {$short_input}";
@@ -200,7 +340,7 @@ class AI_Verify_Factcheck_Post_Generator {
     }
     
     /**
-     * Generate content - just a placeholder that redirects to the custom template
+     * Generate content
      */
     private static function generate_content($report_data) {
         $report_id = $report_data['report_id'] ?? '';
@@ -210,31 +350,29 @@ class AI_Verify_Factcheck_Post_Generator {
     }
     
     /**
-     * Extract and set featured image from report
+     * IMPROVED: Set featured image from URL or download if needed
      */
-    private static function set_featured_image($post_id, $report_data) {
-        $image_url = '';
-        
-        // Priority 1: Get from metadata (from Firecrawl/scraper)
-        if (!empty($report_data['metadata']['featured_image'])) {
-            $image_url = $report_data['metadata']['featured_image'];
-            error_log("AI Verify: Using featured image from metadata: " . substr($image_url, 0, 50));
-        }
-        
-        // Priority 2: Extract from scraped content
-        if (empty($image_url) && !empty($report_data['scraped_content'])) {
-            $content = $report_data['scraped_content'];
-            
-            if (preg_match('/<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']/i', $content, $match)) {
-                $image_url = $match[1];
-            } elseif (preg_match('/<meta[^>]*name=["\']twitter:image["\'][^>]*content=["\']([^"\']+)["\']/i', $content, $match)) {
-                $image_url = $match[1];
-            }
-        }
-        
+    private static function set_featured_image($post_id, $image_url, $source_url = '') {
         if (empty($image_url)) {
-            error_log("AI Verify: No featured image found for post {$post_id}");
+            error_log("AI Verify: No featured image URL provided for post {$post_id}");
             return false;
+        }
+        
+        // Make URL absolute if relative
+        if (!preg_match('/^https?:\/\//i', $image_url) && !empty($source_url)) {
+            $parsed = parse_url($source_url);
+            $scheme = $parsed['scheme'] ?? 'https';
+            $host = $parsed['host'] ?? '';
+            
+            if (substr($image_url, 0, 2) === '//') {
+                $image_url = $scheme . ':' . $image_url;
+            } elseif (substr($image_url, 0, 1) === '/') {
+                $image_url = $scheme . '://' . $host . $image_url;
+            } else {
+                $path = $parsed['path'] ?? '';
+                $path = substr($path, 0, strrpos($path, '/') + 1);
+                $image_url = $scheme . '://' . $host . $path . $image_url;
+            }
         }
         
         // Validate URL
@@ -243,11 +381,19 @@ class AI_Verify_Factcheck_Post_Generator {
             return false;
         }
         
+        // Check if image already attached
+        $existing_thumbnail = get_post_thumbnail_id($post_id);
+        if ($existing_thumbnail) {
+            error_log("AI Verify: Post {$post_id} already has a featured image (ID: {$existing_thumbnail})");
+            return true;
+        }
+        
         // Download and attach image
         require_once(ABSPATH . 'wp-admin/includes/media.php');
         require_once(ABSPATH . 'wp-admin/includes/file.php');
         require_once(ABSPATH . 'wp-admin/includes/image.php');
         
+        // Try to download the image
         $attachment_id = media_sideload_image($image_url, $post_id, '', 'id');
         
         if (!is_wp_error($attachment_id)) {
@@ -255,10 +401,9 @@ class AI_Verify_Factcheck_Post_Generator {
             error_log("AI Verify: Successfully set featured image (attachment {$attachment_id}) for post {$post_id}");
             return true;
         } else {
-            error_log("AI Verify: Failed to set featured image for post {$post_id}: " . $attachment_id->get_error_message());
+            error_log("AI Verify: Failed to download featured image for post {$post_id}: " . $attachment_id->get_error_message());
+            return false;
         }
-        
-        return false;
     }
     
     /**
@@ -281,14 +426,12 @@ class AI_Verify_Factcheck_Post_Generator {
      * Handle old-style report URLs and redirect to post
      */
     public static function handle_report_redirect() {
-        // Check if we're on the old results page with a report parameter
         if (!isset($_GET['report'])) {
             return;
         }
         
         $report_id = sanitize_text_field($_GET['report']);
         
-        // Find the post for this report
         $posts = get_posts(array(
             'post_type' => self::$post_type,
             'meta_key' => 'report_id',
@@ -298,12 +441,9 @@ class AI_Verify_Factcheck_Post_Generator {
         ));
         
         if (!empty($posts)) {
-            // Redirect to the actual post
             wp_redirect(get_permalink($posts[0]->ID), 301);
             exit;
         }
-        
-        // If no post exists, let the normal flow handle it (will create report if needed)
     }
     
     /**
