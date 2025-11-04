@@ -37,16 +37,19 @@ class AI_Verify_Factcheck_Analyzer {
      */
     private static function clean_utf8_recursive($data) {
         if (is_string($data)) {
-            // 1. Force conversion to UTF-8, ignoring invalid characters.
-            // This is much stronger than mb_convert_encoding.
-            $data = @iconv('UTF-8', 'UTF-8//IGNORE', $data);
-            
-            // 2. Fallback just in case iconv isn't available
-            if ($data === false) {
+            // 1. Try to use iconv first, as it's very effective at ignoring invalid bytes.
+            if (function_exists('iconv')) {
+                $data = @iconv('UTF-8', 'UTF-8//IGNORE', $data);
+                if ($data === false) {
+                    // iconv failed, fallback to mb_convert
+                    $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+                }
+            } else {
+                // iconv not available, use mb_convert
                 $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
             }
 
-            // 3. Aggressively strip all non-printable ASCII control characters
+            // 2. Aggressively strip all non-printable ASCII control characters
             // (Note: the 'u' flag is removed to operate on raw bytes)
             $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
             
@@ -371,17 +374,20 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
         if (!empty($matches[0])) {
             $result = json_decode($matches[0], true);
 
-            // --- START FIX ---
-            // Clean the JSON string for any invalid UTF-8 characters BEFORE decoding
-            $json_string = self::clean_utf8_recursive($matches[0]);
-            $result = json_decode($json_string, true);
-                
-            // Log an error if decoding still fails
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                error_log('AI Verify: JSON decode failed - ' . json_last_error_msg());
-                $result = null; // Force fallback
-            }
-            // --- END FIX ---
+            /// --- START FINAL FIX ---
+                // Clean the string using our new robust function
+                $json_string = self::clean_utf8_recursive($matches[0]);
+
+                // NOW, use the JSON_INVALID_UTF8_IGNORE flag during decode.
+                // This tells the parser to simply drop bad characters. (Requires PHP 7.2+)
+                $result = json_decode($json_string, true, 512, JSON_INVALID_UTF8_IGNORE);
+
+                // Log an error if decoding still fails for a *different* reason
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    error_log('AI Verify: JSON decode failed DESPITE IGNORE - ' . json_last_error_msg());
+                    $result = null; // Force fallback
+                }
+                // --- END FINAL FIX ---
             
             if ($result && isset($result['rating'])) {
                 // CRITICAL FIX: Ensure explanation is plain text string
