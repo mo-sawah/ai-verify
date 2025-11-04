@@ -91,27 +91,42 @@ class AI_Verify_Factcheck_Scraper {
             return new WP_Error('scraperapi_error', 'ScraperAPI returned empty content');
         }
         
-        // Extract metadata using the new extractor
-        if (class_exists('AI_Verify_Metadata_Extractor')) {
-            $metadata = AI_Verify_Metadata_Extractor::extract_metadata($html, $url);
-        } else {
-            // Fallback to basic extraction
-            $metadata = array(
-                'title' => self::extract_title_from_html($html),
-                'description' => '',
-                'featured_image' => '',
-                'author' => '',
-                'date' => '',
-                'domain' => '',
-                'favicon' => ''
-            );
-        }
+        // CRITICAL FIX: Extract content FIRST before metadata
+        // This ensures the process never gets stuck on metadata extraction
         
         // Convert HTML to clean markdown
         $markdown = self::html_to_markdown($html);
         
         // Apply smart filtering (includes Daily Mail specific filtering)
         $markdown = self::smart_filter($markdown, $url);
+        
+        // Now extract metadata with full error protection
+        $metadata = array(
+            'title' => 'Untitled',
+            'description' => '',
+            'featured_image' => '',
+            'author' => '',
+            'date' => '',
+            'date_modified' => '',
+            'domain' => '',
+            'favicon' => ''
+        );
+        
+        try {
+            if (class_exists('AI_Verify_Metadata_Extractor')) {
+                $extracted = @AI_Verify_Metadata_Extractor::extract_metadata($html, $url);
+                if (!empty($extracted) && is_array($extracted)) {
+                    $metadata = array_merge($metadata, $extracted);
+                }
+            } else {
+                // Fallback to basic extraction
+                $metadata['title'] = self::extract_title_from_html($html);
+            }
+        } catch (Exception $e) {
+            error_log('AI Verify: Metadata extraction error: ' . $e->getMessage());
+            // Continue with default metadata - never block the process
+            $metadata['title'] = self::extract_title_from_html($html);
+        }
         
         error_log('AI Verify: ScraperAPI success - Title: "' . substr($metadata['title'], 0, 50) . '", Image: ' . ($metadata['featured_image'] ? 'YES' : 'NO') . ', Desc: ' . ($metadata['description'] ? 'YES' : 'NO'));
         
@@ -122,6 +137,7 @@ class AI_Verify_Factcheck_Scraper {
             'featured_image' => $metadata['featured_image'],
             'author' => $metadata['author'],
             'date' => $metadata['date'],
+            'date_modified' => $metadata['date_modified'],
             'domain' => $metadata['domain'],
             'favicon' => $metadata['favicon']
         );
@@ -234,11 +250,12 @@ class AI_Verify_Factcheck_Scraper {
         $markdown = $data['markdown'] ?? '';
         $html = $data['html'] ?? '';
         
-        // Extract comprehensive metadata
+        // Extract comprehensive metadata with error protection
         $title = $metadata['title'] ?? $metadata['ogTitle'] ?? '';
         $description = $metadata['description'] ?? $metadata['ogDescription'] ?? '';
         $author = $metadata['author'] ?? $metadata['ogSiteName'] ?? '';
         $date = $metadata['publishedTime'] ?? $metadata['modifiedTime'] ?? '';
+        $date_modified = $metadata['modifiedTime'] ?? '';
         
         // Get featured image from multiple sources
         $featured_image = '';
@@ -246,14 +263,21 @@ class AI_Verify_Factcheck_Scraper {
             $featured_image = is_array($metadata['ogImage']) ? ($metadata['ogImage'][0]['url'] ?? '') : $metadata['ogImage'];
         }
         if (empty($featured_image) && !empty($html)) {
-            // Extract from HTML as fallback using metadata extractor
-            if (class_exists('AI_Verify_Metadata_Extractor')) {
-                $extracted = AI_Verify_Metadata_Extractor::extract_metadata($html, $url);
-                $featured_image = $extracted['featured_image'] ?? '';
-                if (empty($title)) $title = $extracted['title'];
-                if (empty($description)) $description = $extracted['description'];
-                if (empty($author)) $author = $extracted['author'];
-                if (empty($date)) $date = $extracted['date'];
+            // Extract from HTML as fallback using metadata extractor (with error protection)
+            try {
+                if (class_exists('AI_Verify_Metadata_Extractor')) {
+                    $extracted = @AI_Verify_Metadata_Extractor::extract_metadata($html, $url);
+                    if (!empty($extracted) && is_array($extracted)) {
+                        $featured_image = $extracted['featured_image'] ?? '';
+                        if (empty($title)) $title = $extracted['title'] ?? '';
+                        if (empty($description)) $description = $extracted['description'] ?? '';
+                        if (empty($author)) $author = $extracted['author'] ?? '';
+                        if (empty($date)) $date = $extracted['date'] ?? '';
+                        if (empty($date_modified)) $date_modified = $extracted['date_modified'] ?? '';
+                    }
+                }
+            } catch (Exception $e) {
+                error_log('AI Verify: Firecrawl metadata extraction error: ' . $e->getMessage());
             }
         }
         
@@ -284,6 +308,7 @@ class AI_Verify_Factcheck_Scraper {
             'featured_image' => $featured_image,
             'author' => $author,
             'date' => $date,
+            'date_modified' => $date_modified,
             'domain' => $domain,
             'favicon' => $favicon
         );
@@ -370,30 +395,40 @@ class AI_Verify_Factcheck_Scraper {
             return new WP_Error('scrape_failed', 'Jina Reader failed. Status: ' . $status);
         }
         
-        // Try to extract metadata if we got HTML
+        // Try to extract metadata if we got HTML (with error protection)
         $metadata = array(
             'title' => '',
             'description' => '',
             'featured_image' => '',
             'author' => '',
             'date' => '',
+            'date_modified' => '',
             'domain' => '',
             'favicon' => ''
         );
         
-        if (class_exists('AI_Verify_Metadata_Extractor') && strpos($body, '<html') !== false) {
-            // Jina returned HTML, extract metadata
-            $metadata = AI_Verify_Metadata_Extractor::extract_metadata($body, $url);
-            $body = self::html_to_markdown($body);
-        } else {
-            // Jina returned markdown, extract title from it
-            preg_match('/^# (.+)$/m', $body, $title_match);
-            $metadata['title'] = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($url);
-            
-            // Get domain and favicon
-            $parsed_url = parse_url($url);
-            $metadata['domain'] = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
-            $metadata['favicon'] = "https://www.google.com/s2/favicons?domain={$metadata['domain']}&sz=128";
+        try {
+            if (class_exists('AI_Verify_Metadata_Extractor') && strpos($body, '<html') !== false) {
+                // Jina returned HTML, extract metadata
+                $extracted = @AI_Verify_Metadata_Extractor::extract_metadata($body, $url);
+                if (!empty($extracted) && is_array($extracted)) {
+                    $metadata = array_merge($metadata, $extracted);
+                }
+                $body = self::html_to_markdown($body);
+            } else {
+                // Jina returned markdown, extract title from it
+                preg_match('/^# (.+)$/m', $body, $title_match);
+                $metadata['title'] = !empty($title_match[1]) ? trim($title_match[1]) : self::extract_title_from_url($url);
+                
+                // Get domain and favicon
+                $parsed_url = parse_url($url);
+                $metadata['domain'] = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
+                $metadata['favicon'] = "https://www.google.com/s2/favicons?domain={$metadata['domain']}&sz=128";
+            }
+        } catch (Exception $e) {
+            error_log('AI Verify: Jina metadata extraction error: ' . $e->getMessage());
+            // Use basic title extraction as fallback
+            $metadata['title'] = self::extract_title_from_url($url);
         }
 
         $body = self::smart_filter($body, $url);
@@ -407,6 +442,7 @@ class AI_Verify_Factcheck_Scraper {
             'featured_image' => $metadata['featured_image'],
             'author' => $metadata['author'],
             'date' => $metadata['date'],
+            'date_modified' => $metadata['date_modified'],
             'domain' => $metadata['domain'],
             'favicon' => $metadata['favicon']
         );
@@ -551,6 +587,7 @@ class AI_Verify_Factcheck_Scraper {
         $featured_image = $scrape_result['featured_image'] ?? '';
         $author = $scrape_result['author'] ?? '';
         $date = $scrape_result['date'] ?? '';
+        $date_modified = $scrape_result['date_modified'] ?? '';
         $domain = $scrape_result['domain'] ?? '';
         $favicon = $scrape_result['favicon'] ?? '';
         
@@ -591,6 +628,7 @@ class AI_Verify_Factcheck_Scraper {
             'paragraphs' => $paragraphs,
             'author' => $author,
             'date' => $date,
+            'date_modified' => $date_modified,
             'word_count' => $word_count,
             'excerpt' => $excerpt,
             'description' => $description,

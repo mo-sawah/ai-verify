@@ -24,6 +24,7 @@ class AI_Verify_Metadata_Extractor {
             'featured_image' => '',
             'author' => '',
             'date' => '',
+            'date_modified' => '',
             'favicon' => '',
             'domain' => '',
             'site_name' => ''
@@ -80,6 +81,11 @@ class AI_Verify_Metadata_Extractor {
             ?: self::extract_date($html)
             ?: '';
         
+        // Modified Date
+        $metadata['date_modified'] = $og_data['modified_time']
+            ?: $json_ld['dateModified']
+            ?: '';
+        
         // Site Name
         $metadata['site_name'] = $og_data['site_name']
             ?: $metadata['domain']
@@ -100,6 +106,7 @@ class AI_Verify_Metadata_Extractor {
             'image' => '',
             'author' => '',
             'published_time' => '',
+            'modified_time' => '',
             'site_name' => ''
         );
         
@@ -126,6 +133,11 @@ class AI_Verify_Metadata_Extractor {
         // Match article:published_time
         if (preg_match('/<meta[^>]*property=["\']article:published_time["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
             $data['published_time'] = $match[1];
+        }
+        
+        // Match article:modified_time
+        if (preg_match('/<meta[^>]*property=["\']article:modified_time["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i', $html, $match)) {
+            $data['modified_time'] = $match[1];
         }
         
         // Match og:site_name
@@ -173,7 +185,8 @@ class AI_Verify_Metadata_Extractor {
             'description' => '',
             'image' => '',
             'author' => '',
-            'datePublished' => ''
+            'datePublished' => '',
+            'dateModified' => ''
         );
         
         // Find all JSON-LD scripts
@@ -220,6 +233,9 @@ class AI_Verify_Metadata_Extractor {
                             }
                             if (empty($data['datePublished']) && isset($item['datePublished'])) {
                                 $data['datePublished'] = $item['datePublished'];
+                            }
+                            if (empty($data['dateModified']) && isset($item['dateModified'])) {
+                                $data['dateModified'] = $item['dateModified'];
                             }
                         }
                     }

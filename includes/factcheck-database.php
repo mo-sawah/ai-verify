@@ -175,15 +175,18 @@ class AI_Verify_Factcheck_Database {
         
         $table_name = $wpdb->prefix . self::$table_name;
         
-        // Build metadata array with article info (including description and featured_image)
+        // Build metadata array with article info (including all dates, image, domain, favicon)
         $metadata = array(
             'title' => $scraped_data['title'] ?? '',
             'author' => $scraped_data['author'] ?? '',
             'date' => $scraped_data['date'] ?? '',
+            'date_modified' => $scraped_data['date_modified'] ?? '',
             'word_count' => $scraped_data['word_count'] ?? 0,
             'excerpt' => $scraped_data['excerpt'] ?? '',
             'description' => $scraped_data['description'] ?? '',
             'featured_image' => $scraped_data['featured_image'] ?? '',
+            'domain' => $scraped_data['domain'] ?? '',
+            'favicon' => $scraped_data['favicon'] ?? '',
             'url' => $scraped_data['url'] ?? ''
         );
         

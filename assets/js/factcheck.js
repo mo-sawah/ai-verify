@@ -452,11 +452,47 @@ let currentReportId = null;
         const displayDomain = report.metadata?.domain || domain;
         $("#sourceDomain").text(displayDomain);
 
-        // Set date - use metadata date or report creation date
-        const displayDate = report.metadata?.date
-          ? new Date(report.metadata.date).toLocaleDateString()
-          : formatDate(report.created_at);
-        $("#sourceDate").text(displayDate);
+        // Build date display with author and modification date
+        let dateInfo = [];
+
+        // Add publish date
+        if (report.metadata?.date) {
+          const publishDate = new Date(report.metadata.date).toLocaleDateString(
+            "en-US",
+            {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            }
+          );
+          dateInfo.push(`Published: ${publishDate}`);
+        } else {
+          dateInfo.push(formatDate(report.created_at));
+        }
+
+        // Add author if available
+        if (report.metadata?.author) {
+          dateInfo.push(`By ${report.metadata.author}`);
+        }
+
+        // Add modified date if different from publish date
+        if (
+          report.metadata?.date_modified &&
+          report.metadata.date_modified !== report.metadata.date
+        ) {
+          const modifiedDate = new Date(
+            report.metadata.date_modified
+          ).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+          dateInfo.push(`Updated: ${modifiedDate}`);
+        }
+
+        $("#sourceDate").html(
+          dateInfo.join(' <span class="source-separator">•</span> ')
+        );
 
         // Display featured image or fallback
         const imageToDisplay = featuredImage || fallbackImage;
