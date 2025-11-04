@@ -359,6 +359,18 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
         
         if (!empty($matches[0])) {
             $result = json_decode($matches[0], true);
+
+            // --- START FIX ---
+            // Clean the JSON string for any invalid UTF-8 characters BEFORE decoding
+            $json_string = self::clean_utf8_recursive($matches[0]);
+            $result = json_decode($json_string, true);
+                
+            // Log an error if decoding still fails
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                error_log('AI Verify: JSON decode failed - ' . json_last_error_msg());
+                $result = null; // Force fallback
+            }
+            // --- END FIX ---
             
             if ($result && isset($result['rating'])) {
                 // CRITICAL FIX: Ensure explanation is plain text string
