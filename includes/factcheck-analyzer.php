@@ -38,7 +38,7 @@ class AI_Verify_Factcheck_Analyzer {
     private static function clean_utf8_recursive($data) {
         if (is_string($data)) {
             $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
-            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $data);
+            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
             return $data;
         }
         
