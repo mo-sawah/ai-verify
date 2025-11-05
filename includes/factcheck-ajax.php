@@ -390,6 +390,10 @@ class AI_Verify_Factcheck_Ajax {
                     $unique_sources,
                     $propaganda
                 );
+                
+                // STEP 6: Extract metadata separately (AFTER analysis is complete)
+                AI_Verify_Factcheck_Database::update_progress($report_id, 90, 'Extracting article metadata...');
+                AI_Verify_Factcheck_Database::extract_and_save_metadata($report_id);
 
             } else {
                 // Multi-step workflow with progress tracking
@@ -452,6 +456,10 @@ class AI_Verify_Factcheck_Ajax {
                     $unique_sources,
                     $propaganda
                 );
+                
+                // STEP 6: Extract metadata separately (AFTER analysis is complete)
+                AI_Verify_Factcheck_Database::update_progress($report_id, 95, 'Extracting article metadata...');
+                AI_Verify_Factcheck_Database::extract_and_save_metadata($report_id);
             }
             
             error_log("AI Verify: ✅ Completed successfully: $report_id");

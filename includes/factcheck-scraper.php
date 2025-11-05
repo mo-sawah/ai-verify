@@ -139,7 +139,8 @@ class AI_Verify_Factcheck_Scraper {
             'date' => $metadata['date'],
             'date_modified' => $metadata['date_modified'],
             'domain' => $metadata['domain'],
-            'favicon' => $metadata['favicon']
+            'favicon' => $metadata['favicon'],
+            'html' => $html  // Store HTML for later metadata extraction
         );
     }
 
@@ -310,7 +311,8 @@ class AI_Verify_Factcheck_Scraper {
             'date' => $date,
             'date_modified' => $date_modified,
             'domain' => $domain,
-            'favicon' => $favicon
+            'favicon' => $favicon,
+            'html' => $html  // Store HTML for later metadata extraction
         );
     }
     
@@ -363,7 +365,8 @@ class AI_Verify_Factcheck_Scraper {
             'author' => '',
             'date' => '',
             'domain' => $domain,
-            'favicon' => $favicon
+            'favicon' => $favicon,
+            'html' => ''  // v0 doesn't provide HTML
         );
     }
     
@@ -444,7 +447,8 @@ class AI_Verify_Factcheck_Scraper {
             'date' => $metadata['date'],
             'date_modified' => $metadata['date_modified'],
             'domain' => $metadata['domain'],
-            'favicon' => $metadata['favicon']
+            'favicon' => $metadata['favicon'],
+            'html' => ''  // Jina doesn't provide HTML
         );
     }
     
