@@ -99,8 +99,15 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                 </div>
                 
                 <script>
-                // Inject report data for any JavaScript that needs it
-                window.aiVerifyReportData = <?php echo json_encode($report_data); ?>;
+                    <?php
+                    // Prepare a SMALL, safe object for JavaScript, containing only what's needed.
+                    $js_report_data = array(
+                        'input_type'  => $report_data['input_type'] ?? 'url',
+                        'input_value' => $report_data['input_value'] ?? ''
+                    );
+                    ?>
+                    // Inject *only* the small, safe data object
+                    window.aiVerifyReportData = <?php echo json_encode($js_report_data); ?>;
                 function toggleShareMenu(e) {
                     e.preventDefault();
                     const menu = document.querySelector('.share-menu');
