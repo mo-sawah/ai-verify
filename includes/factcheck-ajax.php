@@ -402,8 +402,8 @@ class AI_Verify_Factcheck_Ajax {
                 
                 AI_Verify_Factcheck_Database::update_progress($report_id, 20, 'Initializing web search analysis...');
                 
-                // Use the new OpenRouter Web Search analyzer
-                $result_data = AI_Verify_Factcheck_OpenRouter_WebSearch::analyze_with_websearch($content, $context, $report['input_value']);
+                // Use the new OpenRouter Web Search analyzer WITH report_id for progress tracking
+                $result_data = AI_Verify_Factcheck_OpenRouter_WebSearch::analyze_with_websearch($content, $context, $report['input_value'], $report_id);
                 
                 if (is_wp_error($result_data)) {
                     throw new Exception($result_data->get_error_message());

@@ -15,10 +15,14 @@ class AI_Verify_Factcheck_OpenRouter_WebSearch {
      * Analyze content using OpenRouter with native web search
      * This is a multistep process but uses OpenRouter's search instead of Tavily
      */
-    public static function analyze_with_websearch($content, $context, $url = '') {
+    public static function analyze_with_websearch($content, $context, $url = '', $report_id = null) {
         error_log('AI Verify: Starting OpenRouter Native Web Search Analysis');
         
         // Step 1: Extract claims (same as before)
+        if ($report_id) {
+            AI_Verify_Factcheck_Database::update_progress($report_id, 25, 'Extracting verifiable claims...');
+        }
+        
         $claims = self::extract_claims($content);
         
         if (empty($claims)) {
@@ -28,12 +32,24 @@ class AI_Verify_Factcheck_OpenRouter_WebSearch {
         error_log('AI Verify: Extracted ' . count($claims) . ' claims for OpenRouter web search');
         
         // Step 2: Fact-check each claim using OpenRouter's web search
-        $factcheck_results = self::factcheck_claims_with_websearch($claims, $context, $url);
+        if ($report_id) {
+            AI_Verify_Factcheck_Database::update_progress($report_id, 30, 'Starting web search verification...');
+        }
+        
+        $factcheck_results = self::factcheck_claims_with_websearch($claims, $context, $url, $report_id);
         
         // Step 3: Detect propaganda
+        if ($report_id) {
+            AI_Verify_Factcheck_Database::update_progress($report_id, 75, 'Analyzing for bias and propaganda...');
+        }
+        
         $propaganda = self::detect_propaganda($content);
         
         // Step 4: Calculate scores
+        if ($report_id) {
+            AI_Verify_Factcheck_Database::update_progress($report_id, 80, 'Calculating credibility score...');
+        }
+        
         $overall_score = self::calculate_overall_score($factcheck_results);
         $credibility_rating = self::get_credibility_rating($overall_score);
         
@@ -110,7 +126,7 @@ Article: {$content}";
      * Fact-check claims using OpenRouter's web search capabilities
      * This makes multiple search calls per claim
      */
-    private static function factcheck_claims_with_websearch($claims, $context, $url) {
+    private static function factcheck_claims_with_websearch($claims, $context, $url, $report_id = null) {
         $results = array();
         $api_key = get_option('ai_verify_openrouter_key');
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
@@ -118,8 +134,24 @@ Article: {$content}";
         // Check if Google Fact Check is available
         $google_key = get_option('ai_verify_google_factcheck_key');
         
+        $total_claims = count($claims);
+        
         foreach ($claims as $index => $claim) {
-            error_log('AI Verify: Checking claim ' . ($index + 1) . '/' . count($claims) . ' with OpenRouter web search');
+            $claim_num = $index + 1;
+            
+            error_log('AI Verify: Checking claim ' . $claim_num . '/' . $total_claims . ' with OpenRouter web search');
+            
+            // Update progress
+            if ($report_id) {
+                $progress = 30 + (($index / $total_claims) * 45); // 30-75%
+                AI_Verify_Factcheck_Database::update_progress(
+                    $report_id, 
+                    $progress, 
+                    "Searching web for claim {$claim_num} of {$total_claims}...",
+                    $claim['text'],
+                    $claim_num
+                );
+            }
             
             $claim_text = $claim['text'];
             
@@ -186,7 +218,7 @@ Article: {$content}";
         error_log('AI Verify: Analyzing claim with OpenRouter web search: ' . substr($claim, 0, 100));
         
         // Build the search-enhanced prompt
-        $prompt = "You are a professional fact-checker with web search capabilities. Your task is to verify this claim by searching the web and analyzing sources.
+        $prompt = "You are a professional fact-checker. This query has WEB SEARCH enabled with 5 search results. You will receive web search results automatically - analyze them thoroughly to verify this claim.
 
 CLAIM TO VERIFY:
 {$claim}
@@ -196,15 +228,16 @@ ARTICLE CONTEXT:
 " . (!empty($url) ? "SOURCE URL: {$url}\n\n" : "") . "
 
 INSTRUCTIONS:
-1. Search the web for information about this specific claim
-2. Focus on authoritative sources (news agencies, academic papers, government sites, fact-checking organizations)
-3. Analyze what you find and compare it to the claim
-4. Provide a detailed fact-check with proper citations
+1. You will receive approximately 5 web search results for this claim
+2. Analyze ALL the web search results provided
+3. Compare what the claim states versus what the authoritative sources say
+4. Cite EVERY source you received in your analysis
+5. Provide a comprehensive fact-check
 
 Return your analysis as a JSON object with this EXACT structure:
 {
     \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
-    \"explanation\": \"Detailed 3-5 paragraph analysis. Start by explaining what the claim states, then what your web searches found, then your conclusion.\",
+    \"explanation\": \"Detailed 3-5 paragraph analysis. In paragraph 1, explain what the claim states. In paragraphs 2-4, discuss what you found in the web search results, citing each source as [Source 1], [Source 2], etc. In the final paragraph, provide your conclusion.\",
     \"sources\": [{\"name\": \"Source Name\", \"url\": \"https://example.com\"}],
     \"evidence_for\": [\"Evidence supporting the claim\"],
     \"evidence_against\": [\"Evidence contradicting the claim\"],
@@ -213,43 +246,42 @@ Return your analysis as a JSON object with this EXACT structure:
 }
 
 RATING GUIDELINES:
-- \"True\": Web sources strongly confirm the claim
-- \"False\": Web sources strongly contradict the claim  
+- \"True\": Web sources strongly confirm the claim with recent, authoritative data
+- \"False\": Web sources strongly contradict the claim with current evidence
 - \"Mostly True\": Claim is largely accurate but missing context
 - \"Mostly False\": Claim has some truth but is largely inaccurate
 - \"Misleading\": Technically true but presented deceptively
 - \"Unverified\": Cannot find sufficient reliable sources
 
-CRITICAL: Include ALL sources you found in your search. Cite them like [Source 1], [Source 2] in your explanation.";
+CRITICAL REQUIREMENTS:
+1. Use CURRENT web search results - ignore outdated information
+2. Include ALL 5 web sources in your sources array
+3. Cite each source explicitly in your explanation
+4. Base your rating on the MOST RECENT and AUTHORITATIVE sources";
 
-        // Prepare the API request with search capabilities
+
+        // Prepare the API request with OpenRouter's web search
+        // Use the :online suffix to enable web search
+        $search_model = $model . ':online';
+        
         $body = array(
-            'model' => $model,
+            'model' => $search_model,
             'messages' => array(
-                array(
-                    'role' => 'system',
-                    'content' => 'You are a professional fact-checker with web search capabilities. Search the web thoroughly to verify claims and cite all sources you find. Always return valid JSON.'
-                ),
                 array(
                     'role' => 'user', 
                     'content' => $prompt
                 )
             ),
             'temperature' => 0.2,
-            'max_tokens' => 3000
-        );
-        
-        // Add web search parameters if the model supports it
-        // Note: This depends on OpenRouter's specific implementation
-        // Some models may support a 'tools' parameter for web search
-        if (self::model_supports_websearch($model)) {
-            $body['tools'] = array(
-                array(
-                    'type' => 'web_search',
-                    'max_results' => 5
+            'max_tokens' => 3000,
+            // Configure web search plugin with explicit max_results
+            'transforms' => array('web'),
+            'plugins' => array(
+                'web' => array(
+                    'max_results' => 5  // Explicitly request 5 search results per claim
                 )
-            );
-        }
+            )
+        );
         
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
@@ -290,44 +322,39 @@ CRITICAL: Include ALL sources you found in your search. Cite them like [Source 1
             return new WP_Error('empty_response', 'No content in response');
         }
         
+        // Extract web search sources from annotations
+        $web_sources = array();
+        $message = $data['choices'][0]['message'] ?? array();
+        
+        if (!empty($message['annotations'])) {
+            error_log('AI Verify: Found ' . count($message['annotations']) . ' web search results in annotations');
+            foreach ($message['annotations'] as $annotation) {
+                if (isset($annotation['type']) && $annotation['type'] === 'web_search_result') {
+                    $web_sources[] = array(
+                        'name' => $annotation['title'] ?? 'Unknown Source',
+                        'url' => $annotation['url'] ?? ''
+                    );
+                }
+            }
+        }
+        
         // Parse the fact-check result from the content
         $result = self::parse_factcheck_response($content);
         
-        // Log the search sources if available in the response metadata
-        if (!empty($data['citations'])) {
-            error_log('AI Verify: Found ' . count($data['citations']) . ' citations in response');
-            // Merge citations into sources if available
-            foreach ($data['citations'] as $citation) {
-                $result['sources'][] = array(
-                    'name' => $citation['title'] ?? $citation['url'] ?? 'Unknown',
-                    'url' => $citation['url'] ?? ''
-                );
+        // Merge web sources from annotations into the result
+        if (!empty($web_sources)) {
+            error_log('AI Verify: Adding ' . count($web_sources) . ' web sources from annotations');
+            // Prepend web sources to ensure they're included
+            if (empty($result['sources'])) {
+                $result['sources'] = $web_sources;
+            } else {
+                // Merge and deduplicate
+                $result['sources'] = array_merge($web_sources, $result['sources']);
+                $result['sources'] = array_values(array_unique($result['sources'], SORT_REGULAR));
             }
         }
         
         return $result;
-    }
-    
-    /**
-     * Check if a model supports web search
-     */
-    private static function model_supports_websearch($model) {
-        // Models that natively support web search on OpenRouter
-        $search_models = array(
-            'perplexity/',
-            'openai/gpt-4-turbo-preview',
-            'anthropic/claude-3-opus',
-            'anthropic/claude-3.5-sonnet',
-            'anthropic/claude-3-sonnet'
-        );
-        
-        foreach ($search_models as $prefix) {
-            if (strpos($model, $prefix) === 0) {
-                return true;
-            }
-        }
-        
-        return false;
     }
     
     /**
