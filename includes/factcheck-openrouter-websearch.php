@@ -12,6 +12,27 @@ if (!defined('ABSPATH')) {
 class AI_Verify_Factcheck_OpenRouter_WebSearch {
     
     /**
+     * Clean text for safe JSON encoding
+     * Removes invalid UTF-8 and problematic characters
+     */
+    private static function clean_text_for_json($text) {
+        if (empty($text)) {
+            return '';
+        }
+        
+        // Ensure valid UTF-8
+        $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+        
+        // Remove control characters except newlines and tabs
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+        
+        // Remove any null bytes
+        $text = str_replace("\0", '', $text);
+        
+        return $text;
+    }
+    
+    /**
      * Analyze content using OpenRouter with native web search
      * This is a multistep process but uses OpenRouter's search instead of Tavily
      */
@@ -92,6 +113,9 @@ class AI_Verify_Factcheck_OpenRouter_WebSearch {
         }
         
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
+        
+        // Clean and truncate content
+        $content = self::clean_text_for_json($content);
         $content = mb_substr($content, 0, 6000);
         
         if (empty(trim($content))) {
@@ -108,6 +132,23 @@ Types: \"statistical\", \"quote\", \"causal\", \"policy\", \"scientific\", \"gen
 
 Article: {$content}";
         
+        $request_body = array(
+            'model' => $model,
+            'messages' => array(
+                array('role' => 'user', 'content' => $prompt)
+            ),
+            'temperature' => 0.3,
+            'max_tokens' => 2000
+        );
+        
+        // Encode with proper flags
+        $body_json = json_encode($request_body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+        if ($body_json === false) {
+            error_log('AI Verify: Failed to encode claim extraction request: ' . json_last_error_msg());
+            return self::extract_claims_basic_fallback($content);
+        }
+        
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
@@ -115,14 +156,7 @@ Article: {$content}";
                 'HTTP-Referer' => home_url(),
                 'X-Title' => get_bloginfo('name')
             ),
-            'body' => json_encode(array(
-                'model' => $model,
-                'messages' => array(
-                    array('role' => 'user', 'content' => $prompt)
-                ),
-                'temperature' => 0.3,
-                'max_tokens' => 2000
-            )),
+            'body' => $body_json,
             'timeout' => 60
         ));
         
@@ -339,6 +373,11 @@ Article: {$content}";
     private static function check_claim_with_websearch($claim, $context, $url, $api_key, $model) {
         error_log('AI Verify: Analyzing claim with OpenRouter web search: ' . substr($claim, 0, 100));
         
+        // Clean all text inputs to prevent JSON encoding issues
+        $claim = self::clean_text_for_json($claim);
+        $context = self::clean_text_for_json($context);
+        $url = self::clean_text_for_json($url);
+        
         // Build the search-enhanced prompt
         $prompt = "You are a professional fact-checker. This query has WEB SEARCH enabled with 5 search results. You will receive web search results automatically - analyze them thoroughly to verify this claim.
 
@@ -398,6 +437,14 @@ CRITICAL REQUIREMENTS:
             'max_tokens' => 3000
         );
         
+        // Encode with proper flags to handle special characters
+        $body_json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+        if ($body_json === false) {
+            error_log('AI Verify: Failed to encode request body to JSON: ' . json_last_error_msg());
+            return new WP_Error('json_encode_failed', 'Failed to prepare API request: ' . json_last_error_msg());
+        }
+        
         error_log('AI Verify: Calling OpenRouter with model: ' . $search_model);
         
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
@@ -407,7 +454,7 @@ CRITICAL REQUIREMENTS:
                 'HTTP-Referer' => home_url(),
                 'X-Title' => get_bloginfo('name')
             ),
-            'body' => json_encode($body),
+            'body' => $body_json,
             'timeout' => 120
         ));
         
