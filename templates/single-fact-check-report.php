@@ -695,6 +695,12 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(172, 210, 191, 0.4);
   }
+
+  .report-section .submit-btn, .report-section .signup-btn {
+    background: linear-gradient(135deg, #acd2bf 0%, #8fc4a8 100%) !important;
+    color: #444444 !important;
+    padding: 5px 0px !important;
+}
 </style>
 
 <!-- HTML for the new blocks -->
