@@ -369,9 +369,15 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
     /**
      * CRITICAL FIX: Parse response with better error handling
      */
+    /**
+     * CRITICAL FIX: Parse response with better error handling
+     * IMPROVED: Better explanation extraction that preserves valid content
+     */
     private static function parse_fact_check_response($content) {
         // Clean the content first
         $content = self::clean_utf8_recursive($content);
+        
+        error_log('AI Verify: Parsing response (first 300 chars): ' . substr($content, 0, 300));
         
         // Try to extract JSON from markdown code blocks first
         if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $content, $matches)) {
@@ -412,59 +418,52 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
             return self::create_fallback_result($content);
         }
         
-        // Ensure explanation is ALWAYS a plain text string
-        $explanation = $result['explanation'] ?? 'No explanation provided';
+        // IMPROVED: Extract explanation with better preservation
+        $explanation = $result['explanation'] ?? '';
         
-        // If explanation is somehow an array or object, convert
+        error_log('AI Verify: Raw explanation type: ' . gettype($explanation));
+        error_log('AI Verify: Raw explanation (first 200 chars): ' . substr(print_r($explanation, true), 0, 200));
+        
+        // If explanation is an array, try to extract text
         if (is_array($explanation)) {
-            $explanation = implode("\n\n", array_filter($explanation, 'is_string'));
+            // Check if it's an array of strings (paragraphs)
+            if (!empty($explanation) && is_string($explanation[0])) {
+                $explanation = implode("\n\n", array_filter($explanation, 'is_string'));
+            } else {
+                // Try to extract 'text' or 'content' field
+                $explanation = $explanation['text'] ?? $explanation['content'] ?? 'No explanation available';
+            }
         } elseif (is_object($explanation)) {
-            $explanation = 'No explanation available';
+            $explanation = $explanation->text ?? $explanation->content ?? 'No explanation available';
         }
         
         // Ensure it's a string
         $explanation = (string) $explanation;
         
-        // CRITICAL: Check for JSON-like content in explanation
-        $trimmed_exp = trim($explanation);
-        if (preg_match('/^\s*[\{\[]/', $trimmed_exp) || 
-            strpos($trimmed_exp, '"evidence_for"') !== false || 
-            strpos($trimmed_exp, '"evidence_against"') !== false ||
-            strpos($trimmed_exp, '"red_flags"') !== false) {
-            
-            error_log('AI Verify: Explanation contains JSON structure, attempting to extract text');
+        // Only clean if explanation looks like it contains nested JSON
+        if (preg_match('/^\s*\{/', trim($explanation))) {
+            error_log('AI Verify: Explanation appears to be nested JSON, attempting to extract');
             
             // Try to decode nested JSON
-            $nested = json_decode($trimmed_exp, true);
+            $nested = json_decode($explanation, true);
             if (is_array($nested) && isset($nested['explanation'])) {
                 $explanation = (string) $nested['explanation'];
             } else {
-                // Extract any readable sentences
-                $sentences = preg_split('/(?<=[.!?])\s+/', $explanation);
-                $clean_sentences = array();
-                foreach ($sentences as $sentence) {
-                    // Skip JSON-like lines
-                    if (!preg_match('/[{}\[\]"]|evidence_|red_flags|confidence/', $sentence)) {
-                        $clean_sentences[] = trim($sentence);
-                    }
-                }
-                
-                if (!empty($clean_sentences)) {
-                    $explanation = implode(' ', $clean_sentences);
-                } else {
-                    $explanation = 'The explanation could not be properly formatted due to data structure issues.';
-                }
+                error_log('AI Verify: Could not extract from nested JSON');
+                // Don't strip aggressively - keep the text as is
             }
         }
         
-        // Clean up any remaining JSON fragments
-        $explanation = preg_replace('/\{[^}]*\}/', '', $explanation);
-        $explanation = preg_replace('/\[[^\]]*\]/', '', $explanation);
-        $explanation = preg_replace('/"(?:evidence_for|evidence_against|red_flags|confidence)":\s*[^,}]*,?/', '', $explanation);
-        
-        // Final cleanup
+        // MINIMAL cleanup - only remove obvious JSON artifacts
+        // Don't remove content that looks like normal text
         $explanation = trim($explanation);
-        if (strlen($explanation) < 20) {
+        
+        // Remove ONLY standalone JSON field markers (not part of sentences)
+        $explanation = preg_replace('/^(?:rating|explanation|sources|evidence_for|evidence_against|red_flags|confidence):\s*/mi', '', $explanation);
+        
+        // Final validation
+        if (empty($explanation) || strlen($explanation) < 20) {
+            error_log('AI Verify: Explanation too short after processing: "' . $explanation . '"');
             $explanation = 'No detailed explanation available for this claim.';
         }
         
