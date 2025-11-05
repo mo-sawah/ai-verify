@@ -192,11 +192,6 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                     });
                 }
                 
-                <style>
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-                </style>
                 
                 // Close share menu when clicking outside
                 document.addEventListener('click', function(e) {
@@ -206,7 +201,11 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                     }
                 });
                 </script>
-                
+                <style>
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                </style>
                 <?php 
                 // UPDATED: Extract all metadata fields including date_modified, domain, favicon
                 $url = $report_data['input_value'] ?? '';

@@ -99,6 +99,15 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                 </div>
                 
                 <script>
+                    <?php
+                    // Prepare a SMALL, safe object for JavaScript, containing only what's needed.
+                    $js_report_data = array(
+                        'input_type'  => $report_data['input_type'] ?? 'url',
+                        'input_value' => $report_data['input_value'] ?? ''
+                    );
+                    ?>
+                    // Inject *only* the small, safe data object
+                    window.aiVerifyReportData = <?php echo json_encode($js_report_data); ?>;
                 function toggleShareMenu(e) {
                     e.preventDefault();
                     const menu = document.querySelector('.share-menu');
@@ -183,11 +192,6 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                     });
                 }
                 
-                <style>
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-                </style>
                 
                 // Close share menu when clicking outside
                 document.addEventListener('click', function(e) {
@@ -197,7 +201,11 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                     }
                 });
                 </script>
-                
+                <style>
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                </style>
                 <?php 
                 // UPDATED: Extract all metadata fields including date_modified, domain, favicon
                 $url = $report_data['input_value'] ?? '';
@@ -590,11 +598,6 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
         
     </article>
 </div>
-
-<script>
-// Inject report data for any JavaScript that needs it
-window.aiVerifyReportData = <?php echo json_encode($report_data); ?>;
-</script>
 
 <?php
 get_footer();
