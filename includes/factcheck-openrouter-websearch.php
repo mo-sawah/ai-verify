@@ -18,48 +18,67 @@ class AI_Verify_Factcheck_OpenRouter_WebSearch {
     public static function analyze_with_websearch($content, $context, $url = '', $report_id = null) {
         error_log('AI Verify: Starting OpenRouter Native Web Search Analysis');
         
-        // Step 1: Extract claims (same as before)
-        if ($report_id) {
-            AI_Verify_Factcheck_Database::update_progress($report_id, 25, 'Extracting verifiable claims...');
+        try {
+            // Validate content
+            if (empty(trim($content))) {
+                throw new Exception('No content provided for analysis');
+            }
+            
+            // Step 1: Extract claims
+            if ($report_id) {
+                AI_Verify_Factcheck_Database::update_progress($report_id, 25, 'Extracting verifiable claims...');
+            }
+            
+            $claims = self::extract_claims($content);
+            
+            if (empty($claims)) {
+                error_log('AI Verify: No claims extracted, cannot proceed');
+                throw new Exception('Could not extract verifiable claims from content');
+            }
+            
+            error_log('AI Verify: Extracted ' . count($claims) . ' claims for OpenRouter web search');
+            
+            // Step 2: Fact-check each claim using OpenRouter's web search
+            if ($report_id) {
+                AI_Verify_Factcheck_Database::update_progress($report_id, 30, 'Starting web search verification...');
+            }
+            
+            $factcheck_results = self::factcheck_claims_with_websearch($claims, $context, $url, $report_id);
+            
+            if (empty($factcheck_results)) {
+                error_log('AI Verify: No fact-check results generated');
+                throw new Exception('Failed to generate fact-check results');
+            }
+            
+            // Step 3: Detect propaganda
+            if ($report_id) {
+                AI_Verify_Factcheck_Database::update_progress($report_id, 75, 'Analyzing for bias and propaganda...');
+            }
+            
+            $propaganda = self::detect_propaganda($content);
+            
+            // Step 4: Calculate scores
+            if ($report_id) {
+                AI_Verify_Factcheck_Database::update_progress($report_id, 80, 'Calculating credibility score...');
+            }
+            
+            $overall_score = self::calculate_overall_score($factcheck_results);
+            $credibility_rating = self::get_credibility_rating($overall_score);
+            
+            error_log('AI Verify: Analysis complete. Score: ' . $overall_score . ', Rating: ' . $credibility_rating);
+            
+            return array(
+                'factcheck_results' => $factcheck_results,
+                'overall_score' => $overall_score,
+                'credibility_rating' => $credibility_rating,
+                'propaganda_techniques' => $propaganda,
+                'method' => 'OpenRouter Native Web Search'
+            );
+            
+        } catch (Exception $e) {
+            error_log('AI Verify: Analysis failed with exception: ' . $e->getMessage());
+            return new WP_Error('analysis_failed', $e->getMessage());
         }
-        
-        $claims = self::extract_claims($content);
-        
-        if (empty($claims)) {
-            return new WP_Error('no_claims', 'Could not extract verifiable claims from content');
-        }
-        
-        error_log('AI Verify: Extracted ' . count($claims) . ' claims for OpenRouter web search');
-        
-        // Step 2: Fact-check each claim using OpenRouter's web search
-        if ($report_id) {
-            AI_Verify_Factcheck_Database::update_progress($report_id, 30, 'Starting web search verification...');
-        }
-        
-        $factcheck_results = self::factcheck_claims_with_websearch($claims, $context, $url, $report_id);
-        
-        // Step 3: Detect propaganda
-        if ($report_id) {
-            AI_Verify_Factcheck_Database::update_progress($report_id, 75, 'Analyzing for bias and propaganda...');
-        }
-        
-        $propaganda = self::detect_propaganda($content);
-        
-        // Step 4: Calculate scores
-        if ($report_id) {
-            AI_Verify_Factcheck_Database::update_progress($report_id, 80, 'Calculating credibility score...');
-        }
-        
-        $overall_score = self::calculate_overall_score($factcheck_results);
-        $credibility_rating = self::get_credibility_rating($overall_score);
-        
-        return array(
-            'factcheck_results' => $factcheck_results,
-            'overall_score' => $overall_score,
-            'credibility_rating' => $credibility_rating,
-            'propaganda_techniques' => $propaganda,
-            'method' => 'OpenRouter Native Web Search'
-        );
     }
     
     /**
@@ -68,15 +87,21 @@ class AI_Verify_Factcheck_OpenRouter_WebSearch {
     private static function extract_claims($content) {
         $api_key = get_option('ai_verify_openrouter_key');
         if (empty($api_key)) {
+            error_log('AI Verify: No OpenRouter API key configured');
             return array();
         }
         
         $model = get_option('ai_verify_openrouter_model', 'anthropic/claude-3.5-sonnet');
         $content = mb_substr($content, 0, 6000);
         
+        if (empty(trim($content))) {
+            error_log('AI Verify: Empty content provided for claim extraction');
+            return array();
+        }
+        
         $prompt = "Extract 8-12 verifiable factual claims from this article. Focus on statistics, names, dates, locations, events, cause-effect relationships, policy claims, scientific claims.
 
-Return ONLY a JSON array:
+Return ONLY a JSON array with NO other text before or after:
 [{\"text\": \"claim\", \"score\": 0.9, \"type\": \"statistical\"}]
 
 Types: \"statistical\", \"quote\", \"causal\", \"policy\", \"scientific\", \"general\"
@@ -102,24 +127,112 @@ Article: {$content}";
         ));
         
         if (is_wp_error($response)) {
-            error_log('AI Verify: OpenRouter claim extraction failed: ' . $response->get_error_message());
-            return array();
+            error_log('AI Verify: OpenRouter claim extraction API error: ' . $response->get_error_message());
+            return self::extract_claims_basic_fallback($content);
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            error_log('AI Verify: OpenRouter returned status ' . $status_code);
+            return self::extract_claims_basic_fallback($content);
         }
         
         $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('AI Verify: Failed to parse OpenRouter response: ' . json_last_error_msg());
+            return self::extract_claims_basic_fallback($content);
+        }
+        
         $text = $body['choices'][0]['message']['content'] ?? '';
         
+        if (empty($text)) {
+            error_log('AI Verify: Empty response from OpenRouter');
+            return self::extract_claims_basic_fallback($content);
+        }
+        
+        error_log('AI Verify: OpenRouter response (first 200 chars): ' . substr($text, 0, 200));
+        
+        // Try to extract JSON array from response
         preg_match('/\[.*\]/s', $text, $matches);
         if (!empty($matches[0])) {
             $claims = json_decode($matches[0], true);
-            if (is_array($claims)) {
+            if (is_array($claims) && !empty($claims)) {
                 error_log('AI Verify: Successfully extracted ' . count($claims) . ' claims');
                 return $claims;
+            } else {
+                error_log('AI Verify: Failed to decode claims JSON: ' . json_last_error_msg());
+            }
+        } else {
+            error_log('AI Verify: No JSON array found in response');
+        }
+        
+        // Fallback to basic extraction
+        error_log('AI Verify: Falling back to basic claim extraction');
+        return self::extract_claims_basic_fallback($content);
+    }
+    
+    /**
+     * Basic fallback claim extraction
+     */
+    private static function extract_claims_basic_fallback($content) {
+        error_log('AI Verify: Using basic fallback claim extraction');
+        
+        $sentences = preg_split('/(?<=[.!?])\s+(?=[A-Z])/', $content);
+        $claims = array();
+        
+        foreach ($sentences as $sentence) {
+            $sentence = trim($sentence);
+            
+            // Look for sentences with factual indicators
+            $score = 0;
+            
+            if (preg_match('/\b(according to|said|stated|reported|announced|confirmed)\b/i', $sentence)) {
+                $score += 0.3;
+            }
+            
+            if (preg_match('/\d+/', $sentence)) {
+                $score += 0.2;
+            }
+            
+            if (preg_match('/\b(percent|million|billion|trillion|thousand)\b/i', $sentence)) {
+                $score += 0.2;
+            }
+            
+            if (str_word_count($sentence) >= 10 && $score >= 0.3) {
+                $claims[] = array(
+                    'text' => $sentence,
+                    'score' => min($score, 1.0),
+                    'type' => 'general'
+                );
             }
         }
         
-        error_log('AI Verify: Failed to parse claims JSON');
-        return array();
+        // Sort by score
+        usort($claims, function($a, $b) {
+            return $b['score'] <=> $a['score'];
+        });
+        
+        // Return top 10 claims
+        $final_claims = array_slice($claims, 0, 10);
+        
+        if (empty($final_claims)) {
+            error_log('AI Verify: Basic extraction found 0 claims');
+            // Create at least one generic claim from the content
+            $first_sentences = array_slice($sentences, 0, 3);
+            if (!empty($first_sentences)) {
+                $final_claims = array(
+                    array(
+                        'text' => implode(' ', $first_sentences),
+                        'score' => 0.5,
+                        'type' => 'general'
+                    )
+                );
+            }
+        }
+        
+        error_log('AI Verify: Basic extraction returned ' . count($final_claims) . ' claims');
+        return $final_claims;
     }
     
     /**
@@ -186,7 +299,11 @@ Article: {$content}";
             // Use OpenRouter with web search
             $check_result = self::check_claim_with_websearch($claim_text, $context, $url, $api_key, $model);
             
-            if (!is_wp_error($check_result) && !empty($check_result)) {
+            if (is_wp_error($check_result)) {
+                error_log('AI Verify: Claim verification failed: ' . $check_result->get_error_message());
+                $result['explanation'] = 'Unable to verify this claim with web sources. Error: ' . $check_result->get_error_message();
+                $result['confidence'] = 0.3;
+            } elseif (!empty($check_result)) {
                 $result['rating'] = $check_result['rating'] ?? 'Unverified';
                 $result['explanation'] = $check_result['explanation'] ?? 'No analysis available';
                 $result['sources'] = $check_result['sources'] ?? array();
@@ -195,6 +312,7 @@ Article: {$content}";
                 $result['evidence_against'] = $check_result['evidence_against'] ?? array();
                 $result['red_flags'] = $check_result['red_flags'] ?? array();
             } else {
+                error_log('AI Verify: Empty check result for claim');
                 $result['explanation'] = 'Unable to verify this claim with web sources.';
                 $result['confidence'] = 0.3;
             }
@@ -205,6 +323,10 @@ Article: {$content}";
             if ($index < count($claims) - 1) {
                 usleep(500000); // 0.5 second delay
             }
+        }
+        
+        if (empty($results)) {
+            error_log('AI Verify: No results generated from claim verification');
         }
         
         return $results;
@@ -261,7 +383,7 @@ CRITICAL REQUIREMENTS:
 
 
         // Prepare the API request with OpenRouter's web search
-        // Use the :online suffix to enable web search
+        // Using :online suffix - simplest approach according to OpenRouter docs
         $search_model = $model . ':online';
         
         $body = array(
@@ -273,15 +395,10 @@ CRITICAL REQUIREMENTS:
                 )
             ),
             'temperature' => 0.2,
-            'max_tokens' => 3000,
-            // Configure web search plugin with explicit max_results
-            'transforms' => array('web'),
-            'plugins' => array(
-                'web' => array(
-                    'max_results' => 5  // Explicitly request 5 search results per claim
-                )
-            )
+            'max_tokens' => 3000
         );
+        
+        error_log('AI Verify: Calling OpenRouter with model: ' . $search_model);
         
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
@@ -310,7 +427,7 @@ CRITICAL REQUIREMENTS:
         $data = json_decode($response_body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('AI Verify: Failed to parse OpenRouter response JSON');
+            error_log('AI Verify: Failed to parse OpenRouter response JSON: ' . json_last_error_msg());
             return new WP_Error('json_error', 'Invalid JSON response');
         }
         
@@ -319,15 +436,18 @@ CRITICAL REQUIREMENTS:
         
         if (empty($content)) {
             error_log('AI Verify: Empty content in OpenRouter response');
+            error_log('AI Verify: Full response: ' . print_r($data, true));
             return new WP_Error('empty_response', 'No content in response');
         }
+        
+        error_log('AI Verify: Received response (first 300 chars): ' . substr($content, 0, 300));
         
         // Extract web search sources from annotations
         $web_sources = array();
         $message = $data['choices'][0]['message'] ?? array();
         
         if (!empty($message['annotations'])) {
-            error_log('AI Verify: Found ' . count($message['annotations']) . ' web search results in annotations');
+            error_log('AI Verify: Found ' . count($message['annotations']) . ' annotations in response');
             foreach ($message['annotations'] as $annotation) {
                 if (isset($annotation['type']) && $annotation['type'] === 'web_search_result') {
                     $web_sources[] = array(
@@ -336,6 +456,9 @@ CRITICAL REQUIREMENTS:
                     );
                 }
             }
+            error_log('AI Verify: Extracted ' . count($web_sources) . ' web search sources from annotations');
+        } else {
+            error_log('AI Verify: No annotations found in response');
         }
         
         // Parse the fact-check result from the content
@@ -343,7 +466,7 @@ CRITICAL REQUIREMENTS:
         
         // Merge web sources from annotations into the result
         if (!empty($web_sources)) {
-            error_log('AI Verify: Adding ' . count($web_sources) . ' web sources from annotations');
+            error_log('AI Verify: Adding ' . count($web_sources) . ' web sources to result');
             // Prepend web sources to ensure they're included
             if (empty($result['sources'])) {
                 $result['sources'] = $web_sources;
@@ -353,6 +476,8 @@ CRITICAL REQUIREMENTS:
                 $result['sources'] = array_values(array_unique($result['sources'], SORT_REGULAR));
             }
         }
+        
+        error_log('AI Verify: Final result has ' . count($result['sources']) . ' sources, rating: ' . ($result['rating'] ?? 'unknown'));
         
         return $result;
     }
