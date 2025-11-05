@@ -1,10 +1,7 @@
 <?php
 /**
- * FIXED: Database Operations - Ensures Metadata is ALWAYS Saved
- * Changes:
- * - Metadata saved immediately after scraping
- * - All metadata fields properly extracted and stored
- * - Never loses title, author, date, image data
+ * FIXED: Database Operations with Migration Support
+ * Fixes the missing scraped_html column issue
  */
 
 if (!defined('ABSPATH')) {
@@ -14,7 +11,11 @@ if (!defined('ABSPATH')) {
 class AI_Verify_Factcheck_Database {
     
     private static $table_name = 'ai_verify_factcheck_reports';
+    private static $db_version = '1.1'; // Increment when schema changes
     
+    /**
+     * Create or upgrade tables
+     */
     public static function create_tables() {
         global $wpdb;
         
@@ -54,6 +55,45 @@ class AI_Verify_Factcheck_Database {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+        
+        // Run migration if needed
+        self::migrate_database();
+        
+        // Update version
+        update_option('ai_verify_factcheck_db_version', self::$db_version);
+    }
+    
+    /**
+     * Migrate existing database to add missing columns
+     */
+    private static function migrate_database() {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . self::$table_name;
+        $current_version = get_option('ai_verify_factcheck_db_version', '1.0');
+        
+        // Check if scraped_html column exists
+        $column_exists = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = %s 
+                AND TABLE_NAME = %s 
+                AND COLUMN_NAME = 'scraped_html'",
+                DB_NAME,
+                $table_name
+            )
+        );
+        
+        // Add scraped_html column if it doesn't exist
+        if (empty($column_exists)) {
+            error_log('AI Verify: Adding missing scraped_html column to database');
+            $wpdb->query(
+                "ALTER TABLE {$table_name} 
+                ADD COLUMN scraped_html longtext DEFAULT NULL 
+                AFTER scraped_content"
+            );
+            error_log('AI Verify: Successfully added scraped_html column');
+        }
     }
     
     public static function create_report($input_type, $input_value) {
@@ -129,15 +169,14 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * FIXED: Save scraped content with COMPREHENSIVE metadata
-     * Ensures ALL metadata fields are captured and saved
+     * Save scraped content with comprehensive metadata
      */
     public static function save_scraped_content($report_id, $scraped_data, $content_type = 'article') {
         global $wpdb;
         
         $table_name = $wpdb->prefix . self::$table_name;
         
-        // CRITICAL: Build complete metadata array with ALL fields
+        // Build complete metadata array
         $metadata = array(
             'title' => $scraped_data['title'] ?? '',
             'author' => $scraped_data['author'] ?? '',
@@ -152,7 +191,7 @@ class AI_Verify_Factcheck_Database {
             'url' => $scraped_data['url'] ?? $scraped_data['source_url'] ?? ''
         );
         
-        // Remove empty values to save space
+        // Remove empty values
         $metadata = array_filter($metadata, function($value) {
             return !empty($value);
         });
@@ -164,24 +203,29 @@ class AI_Verify_Factcheck_Database {
             'image' => !empty($metadata['featured_image']) ? 'YES' : 'NO'
         )));
         
-        // ALSO store HTML for later metadata re-extraction if needed
         $html = $scraped_data['html'] ?? '';
         
         $update_data = array(
             'scraped_content' => $scraped_data['content'] ?? '',
-            'scraped_html' => $html,  // NEW: Store HTML
+            'scraped_html' => $html,
             'content_type' => sanitize_text_field($content_type),
-            'metadata' => json_encode($metadata), // Save as JSON
+            'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'status' => 'scraped'
         );
         
-        $wpdb->update(
+        $result = $wpdb->update(
             $table_name,
             $update_data,
             array('report_id' => $report_id)
         );
         
+        if ($result === false) {
+            error_log('AI Verify: Database error saving scraped content: ' . $wpdb->last_error);
+            return false;
+        }
+        
         error_log("AI Verify: Saved scraped content + metadata for {$report_id}");
+        return true;
     }
     
     public static function save_claims($report_id, $claims) {
@@ -207,21 +251,22 @@ class AI_Verify_Factcheck_Database {
         
         $table_name = $wpdb->prefix . 'ai_verify_factcheck_reports';
         
-        $metadata = array();
-        if (!empty($propaganda) && is_array($propaganda)) {
-            $metadata['propaganda_techniques'] = $propaganda;
-        }
-        
-        // Get existing metadata and merge
+        // Get existing metadata
         $existing_meta = $wpdb->get_var(
             $wpdb->prepare("SELECT metadata FROM $table_name WHERE report_id = %s", $report_id)
         );
         
+        $metadata = array();
         if (!empty($existing_meta)) {
-            $existing_metadata = json_decode($existing_meta, true);
-            if (is_array($existing_metadata)) {
-                $metadata = array_merge($existing_metadata, $metadata);
+            $metadata = json_decode($existing_meta, true);
+            if (!is_array($metadata)) {
+                $metadata = array();
             }
+        }
+        
+        // Add propaganda to metadata
+        if (!empty($propaganda) && is_array($propaganda)) {
+            $metadata['propaganda_techniques'] = $propaganda;
         }
         
         $update_data = array(
@@ -230,7 +275,7 @@ class AI_Verify_Factcheck_Database {
             'overall_score' => $overall_score,
             'credibility_rating' => $rating,
             'sources' => json_encode($sources),
-            'metadata' => json_encode($metadata),
+            'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'completed_at' => current_time('mysql')
         );
         
@@ -261,8 +306,7 @@ class AI_Verify_Factcheck_Database {
     }
     
     /**
-     * NEW: Extract and save metadata separately AFTER analysis
-     * This prevents metadata extraction from interfering with AI analysis
+     * Extract and save metadata separately
      */
     public static function extract_and_save_metadata($report_id) {
         global $wpdb;
@@ -271,7 +315,6 @@ class AI_Verify_Factcheck_Database {
         
         error_log('AI Verify: Extracting metadata separately for ' . $report_id);
         
-        // Get URL and existing metadata from database
         $data = $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT input_value, scraped_html, metadata FROM $table_name WHERE report_id = %s",
@@ -295,7 +338,6 @@ class AI_Verify_Factcheck_Database {
             return $existing_meta;
         }
         
-        // Extract metadata using the metadata extractor
         $metadata = array();
         
         if (!empty($html) && class_exists('AI_Verify_Metadata_Extractor')) {
@@ -307,7 +349,7 @@ class AI_Verify_Factcheck_Database {
             }
         }
         
-        // If extraction failed or didn't get key fields, use fallback
+        // Fallback if extraction failed
         if (empty($metadata) || empty($metadata['title'])) {
             $parsed_url = parse_url($url);
             $domain = isset($parsed_url['host']) ? str_replace('www.', '', $parsed_url['host']) : '';
@@ -327,12 +369,11 @@ class AI_Verify_Factcheck_Database {
             );
         }
         
-        // Merge with existing metadata (preserve any fields that were already there)
+        // Merge with existing
         if (!empty($existing_meta)) {
             $metadata = array_merge($existing_meta, $metadata);
         }
         
-        // Save updated metadata
         $wpdb->update(
             $table_name,
             array('metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),

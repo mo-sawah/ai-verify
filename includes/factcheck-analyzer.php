@@ -1,7 +1,7 @@
 <?php
 /**
- * FIXED: Fact-Check Analyzer with Improved JSON Parsing
- * Fixes the issue where JSON parsing fails due to control characters
+ * FIXED: Fact-Check Analyzer with Robust JSON Parsing
+ * Properly handles newlines and control characters in AI responses
  */
 
 if (!defined('ABSPATH')) {
@@ -11,7 +11,38 @@ if (!defined('ABSPATH')) {
 class AI_Verify_Factcheck_Analyzer {
     
     /**
-     * FIXED: Safe JSON encode that cleans UTF-8 BEFORE encoding
+     * CRITICAL FIX: Clean JSON string - handles newlines in string values
+     */
+    private static function clean_json_string($json_str) {
+        // Remove BOM
+        $json_str = preg_replace('/^\xEF\xBB\xBF/', '', $json_str);
+        
+        // Ensure proper UTF-8
+        if (!mb_check_encoding($json_str, 'UTF-8')) {
+            $json_str = mb_convert_encoding($json_str, 'UTF-8', 'UTF-8');
+        }
+        
+        // CRITICAL: Escape unescaped newlines WITHIN string values
+        // This regex finds strings and escapes newlines within them
+        $json_str = preg_replace_callback(
+            '/"([^"]*(?:\\\\"[^"]*)*)"/',
+            function($matches) {
+                $string_content = $matches[1];
+                // Escape newlines, returns, and tabs if not already escaped
+                $string_content = str_replace(["\r\n", "\r", "\n", "\t"], ['\\n', '\\n', '\\n', '\\t'], $string_content);
+                return '"' . $string_content . '"';
+            },
+            $json_str
+        );
+        
+        // Remove any remaining control characters OUTSIDE of strings
+        $json_str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $json_str);
+        
+        return trim($json_str);
+    }
+    
+    /**
+     * Safe JSON encode
      */
     private static function safe_json_encode($data) {
         $data = self::clean_utf8_recursive($data);
@@ -34,7 +65,6 @@ class AI_Verify_Factcheck_Analyzer {
     private static function clean_utf8_recursive($data) {
         if (is_string($data)) {
             $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
-            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $data);
             return $data;
         }
         
@@ -54,28 +84,7 @@ class AI_Verify_Factcheck_Analyzer {
     }
     
     /**
-     * CRITICAL FIX: Clean JSON string before decoding
-     */
-    private static function clean_json_string($json_string) {
-        // Remove BOM
-        $json_string = preg_replace('/^\xEF\xBB\xBF/', '', $json_string);
-        
-        // Remove control characters EXCEPT newline, carriage return, and tab
-        $json_string = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $json_string);
-        
-        // Fix common issues
-        $json_string = str_replace(["\r\n", "\r"], "\n", $json_string);
-        
-        // Ensure proper UTF-8
-        if (!mb_check_encoding($json_string, 'UTF-8')) {
-            $json_string = mb_convert_encoding($json_string, 'UTF-8', 'UTF-8');
-        }
-        
-        return $json_string;
-    }
-    
-    /**
-     * Extract claims with better AI prompt
+     * Extract claims with AI
      */
     public static function extract_claims($content) {
         error_log('AI Verify: Starting AI-based claim extraction...');
@@ -132,7 +141,7 @@ class AI_Verify_Factcheck_Analyzer {
                 }
             }
             
-            // Use Perplexity or OpenRouter with web search
+            // Use Perplexity or OpenRouter
             if ($api_provider === 'perplexity') {
                 $ai_result = self::check_with_perplexity_optimized($claim['text'], $context);
             } else {
@@ -176,10 +185,10 @@ class AI_Verify_Factcheck_Analyzer {
 Claim: {$claim}
 Context: {$context}
 
-Provide a comprehensive fact-check in JSON format:
+Provide a comprehensive fact-check in JSON format. CRITICAL: All string values must be on a single line with \\n for line breaks:
 {
     \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
-    \"explanation\": \"3-5 paragraph detailed explanation citing all sources you found\",
+    \"explanation\": \"3-5 paragraph detailed explanation citing all sources you found. Use \\n for paragraph breaks.\",
     \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
     \"evidence_for\": [\"evidence supporting\"],
     \"evidence_against\": [\"evidence contradicting\"],
@@ -190,7 +199,8 @@ Provide a comprehensive fact-check in JSON format:
 Requirements:
 - 3-5 paragraphs minimum
 - Cite ALL sources (minimum 3-5)
-- Explain what article claims vs what sources say";
+- Explain what article claims vs what sources say
+- Use \\n for line breaks, not actual newlines";
         
         $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
             'headers' => array(
@@ -200,7 +210,7 @@ Requirements:
             'body' => self::safe_json_encode(array(
                 'model' => 'sonar-pro',
                 'messages' => array(
-                    array('role' => 'system', 'content' => 'You are a fact-checker. Return valid JSON with comprehensive analysis.'),
+                    array('role' => 'system', 'content' => 'You are a fact-checker. Return valid JSON with \\n for line breaks. Never use actual newlines in JSON string values.'),
                     array('role' => 'user', 'content' => $prompt)
                 ),
                 'temperature' => 0.2,
@@ -225,7 +235,7 @@ Requirements:
     }
     
     /**
-     * ENHANCED: Check with OpenRouter + Detailed Analysis
+     * ENHANCED: Check with OpenRouter + Tavily Search
      */
     private static function check_with_openrouter_enhanced($claim, $context) {
         $api_key = get_option('ai_verify_openrouter_key');
@@ -254,7 +264,7 @@ Requirements:
             );
         }
         
-        // Build comprehensive context
+        // Build context
         $web_context = "\n\n=== WEB SEARCH RESULTS ===\n";
         foreach ($web_results as $idx => $result) {
             $web_context .= "\n[Source " . ($idx + 1) . "]\n";
@@ -263,7 +273,6 @@ Requirements:
             $web_context .= "Content: {$result['content']}\n---\n\n";
         }
         
-        // ENHANCED PROMPT
         $prompt = "You are a professional fact-checker. Analyze this claim using ALL web search results.
 
 Claim: {$claim}
@@ -271,10 +280,12 @@ Context: {$context}
 
 {$web_context}
 
-Provide comprehensive fact-check in valid JSON:
+CRITICAL INSTRUCTION: Return valid JSON. Use \\n for line breaks in explanations, NEVER use actual newline characters.
+
+Format:
 {
     \"rating\": \"True/False/Mostly True/Mostly False/Misleading/Unverified\",
-    \"explanation\": \"DETAILED 3-5 paragraphs\",
+    \"explanation\": \"DETAILED 3-5 paragraphs. Use \\n\\n for paragraph breaks.\",
     \"sources\": [{\"name\": \"source name\", \"url\": \"https://...\"}],
     \"evidence_for\": [\"evidence supporting\"],
     \"evidence_against\": [\"evidence contradicting\"],
@@ -282,30 +293,19 @@ Provide comprehensive fact-check in valid JSON:
     \"confidence\": 0.85
 }
 
-EXPLANATION STRUCTURE (3-5 paragraphs):
+EXPLANATION STRUCTURE (use \\n\\n between paragraphs):
 
-Paragraph 1: WHAT THE CLAIM SAYS
-- State what the article is claiming
-- Identify specific facts being asserted
-
-Paragraphs 2-4: WHAT SOURCES SAY
-- Analyze each source [Source 1], [Source 2], etc.
-- Explain what each says about the claim
-- Note agreements/contradictions
-- Evaluate source credibility
-
-Final Paragraph: CONCLUSION
-- Synthesize all evidence
-- Explain why this rating
-- Note nuances/caveats
+Paragraph 1: What the claim says\\n\\n
+Paragraphs 2-4: What sources say [Source 1], [Source 2]\\n\\n
+Final: Conclusion and rating justification
 
 RATING GUIDELINES:
-- \"True\" - Strong evidence from multiple sources confirms
+- \"True\" - Strong evidence confirms
 - \"False\" - Strong evidence contradicts
-- \"Misleading\" - Technically true but misleading context
+- \"Misleading\" - Technically true but misleading
 - \"Unverified\" - Insufficient evidence
 
-CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Source X].";
+Include ALL source URLs.";
         
         $response = wp_remote_post('https://openrouter.ai/api/v1/chat/completions', array(
             'headers' => array(
@@ -317,7 +317,7 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
             'body' => self::safe_json_encode(array(
                 'model' => $model,
                 'messages' => array(
-                    array('role' => 'system', 'content' => 'You are a fact-checker. Provide comprehensive multi-paragraph analysis. Always return valid JSON.'),
+                    array('role' => 'system', 'content' => 'You are a fact-checker. Always return valid JSON. Use \\n for line breaks, never actual newlines in JSON strings.'),
                     array('role' => 'user', 'content' => $prompt)
                 ),
                 'temperature' => 0.2,
@@ -367,32 +367,25 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
     }
 
     /**
-     * CRITICAL FIX: Parse response with better error handling
-     */
-    /**
-     * CRITICAL FIX: Parse response with better error handling
-     * IMPROVED: Better explanation extraction that preserves valid content
+     * CRITICAL FIX: Parse response with robust JSON handling
      */
     private static function parse_fact_check_response($content) {
-        // Clean the content first
-        $content = self::clean_utf8_recursive($content);
-        
         error_log('AI Verify: Parsing response (first 300 chars): ' . substr($content, 0, 300));
         
-        // Try to extract JSON from markdown code blocks first
+        // Try to extract JSON from markdown code blocks
         if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $content, $matches)) {
             $json_str = $matches[1];
         } elseif (preg_match('/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/s', $content, $matches)) {
-            // Extract JSON object (more careful pattern)
             $json_str = $matches[0];
         } else {
-            // No JSON found at all
             error_log('AI Verify: No JSON found in response');
             return self::create_fallback_result($content);
         }
         
-        // Clean the JSON string
+        // Clean the JSON string - handles newlines properly
         $json_str = self::clean_json_string($json_str);
+        
+        error_log('AI Verify: Cleaned JSON (first 300 chars): ' . substr($json_str, 0, 300));
         
         // Try to decode
         $result = json_decode($json_str, true);
@@ -400,74 +393,45 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
         
         if ($json_error !== JSON_ERROR_NONE) {
             error_log('AI Verify: JSON decode failed - ' . json_last_error_msg());
-            error_log('AI Verify: Problematic JSON (first 500 chars): ' . substr($json_str, 0, 500));
+            error_log('AI Verify: Full JSON string: ' . $json_str);
             
-            // Try to fix common JSON issues
-            $json_str = self::attempt_json_fix($json_str);
+            // Try additional fixes
+            $json_str = self::attempt_aggressive_json_fix($json_str);
             $result = json_decode($json_str, true);
             
             if (json_last_error() !== JSON_ERROR_NONE) {
-                error_log('AI Verify: JSON still invalid after fix attempt');
+                error_log('AI Verify: JSON still invalid after aggressive fix');
                 return self::create_fallback_result($content);
             }
         }
         
-        // Validate the result structure
+        // Validate structure
         if (!is_array($result) || !isset($result['rating'])) {
             error_log('AI Verify: Invalid result structure');
             return self::create_fallback_result($content);
         }
         
-        // IMPROVED: Extract explanation with better preservation
+        // Process explanation
         $explanation = $result['explanation'] ?? '';
         
-        error_log('AI Verify: Raw explanation type: ' . gettype($explanation));
-        error_log('AI Verify: Raw explanation (first 200 chars): ' . substr(print_r($explanation, true), 0, 200));
-        
-        // If explanation is an array, try to extract text
         if (is_array($explanation)) {
-            // Check if it's an array of strings (paragraphs)
-            if (!empty($explanation) && is_string($explanation[0])) {
-                $explanation = implode("\n\n", array_filter($explanation, 'is_string'));
-            } else {
-                // Try to extract 'text' or 'content' field
-                $explanation = $explanation['text'] ?? $explanation['content'] ?? 'No explanation available';
-            }
+            $explanation = implode("\n\n", array_filter($explanation, 'is_string'));
         } elseif (is_object($explanation)) {
             $explanation = $explanation->text ?? $explanation->content ?? 'No explanation available';
         }
         
-        // Ensure it's a string
         $explanation = (string) $explanation;
         
-        // Only clean if explanation looks like it contains nested JSON
-        if (preg_match('/^\s*\{/', trim($explanation))) {
-            error_log('AI Verify: Explanation appears to be nested JSON, attempting to extract');
-            
-            // Try to decode nested JSON
-            $nested = json_decode($explanation, true);
-            if (is_array($nested) && isset($nested['explanation'])) {
-                $explanation = (string) $nested['explanation'];
-            } else {
-                error_log('AI Verify: Could not extract from nested JSON');
-                // Don't strip aggressively - keep the text as is
-            }
-        }
-        
-        // MINIMAL cleanup - only remove obvious JSON artifacts
-        // Don't remove content that looks like normal text
+        // Convert \n to actual newlines for display
+        $explanation = str_replace('\\n', "\n", $explanation);
         $explanation = trim($explanation);
         
-        // Remove ONLY standalone JSON field markers (not part of sentences)
-        $explanation = preg_replace('/^(?:rating|explanation|sources|evidence_for|evidence_against|red_flags|confidence):\s*/mi', '', $explanation);
-        
-        // Final validation
         if (empty($explanation) || strlen($explanation) < 20) {
-            error_log('AI Verify: Explanation too short after processing: "' . $explanation . '"');
+            error_log('AI Verify: Explanation too short');
             $explanation = 'No detailed explanation available for this claim.';
         }
         
-        error_log('AI Verify: Successfully parsed - Rating: ' . ($result['rating'] ?? 'none') . ', Explanation length: ' . strlen($explanation));
+        error_log('AI Verify: Successfully parsed - Rating: ' . ($result['rating'] ?? 'none'));
         
         return array(
             'rating' => $result['rating'] ?? 'Unverified',
@@ -481,196 +445,132 @@ CRITICAL: Include ALL source URLs in sources array. Cite sources by number [Sour
     }
     
     /**
-     * NEW: Attempt to fix common JSON issues
+     * Aggressive JSON fix for stubborn cases
      */
-    private static function attempt_json_fix($json_str) {
-        // Fix unescaped quotes in strings
+    private static function attempt_aggressive_json_fix($json_str) {
+        // Fix trailing commas
+        $json_str = preg_replace('/,(\s*[\]}])/', '$1', $json_str);
+        
+        // Try to fix quotes in explanations more aggressively
         $json_str = preg_replace_callback(
-            '/"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"/s',
+            '/"explanation"\s*:\s*"(.*?)"/s',
             function($matches) {
-                return '"' . addcslashes($matches[1], '"') . '"';
+                $exp = $matches[1];
+                // Escape internal quotes
+                $exp = str_replace('"', '\\"', $exp);
+                return '"explanation": "' . $exp . '"';
             },
             $json_str
         );
-        
-        // Fix trailing commas
-        $json_str = preg_replace('/,(\s*[\]}])/', '$1', $json_str);
         
         return $json_str;
     }
     
     /**
-     * NEW: Create fallback result when JSON parsing fails
+     * Create fallback result when parsing fails
      */
     private static function create_fallback_result($content) {
-        // Try to extract rating from text
         $rating = 'Unverified';
-        if (preg_match('/(true|false|mostly true|mostly false|misleading|unverified|mixture)/i', $content, $rating_match)) {
+        if (preg_match('/(true|false|mostly true|mostly false|misleading|unverified)/i', $content, $rating_match)) {
             $rating = ucwords(strtolower($rating_match[1]));
         }
         
-        // Extract explanation - be very aggressive about removing JSON
+        // Extract text that looks like explanation
         $explanation = strip_tags($content);
-        
-        // Remove all JSON structures
         $explanation = preg_replace('/\{[^}]*\}/s', '', $explanation);
         $explanation = preg_replace('/\[[^\]]*\]/s', '', $explanation);
         
-        // Remove JSON-like key-value pairs
-        $explanation = preg_replace('/"[^"]*":\s*"[^"]*"/s', '', $explanation);
-        $explanation = preg_replace('/"[^"]*":\s*\d+\.?\d*/s', '', $explanation);
-        $explanation = preg_replace('/"[^"]*":\s*\[/s', '', $explanation);
-        
-        // Remove specific field names
-        $json_fields = array('rating', 'explanation', 'sources', 'evidence_for', 'evidence_against', 'red_flags', 'confidence');
-        foreach ($json_fields as $field) {
-            $explanation = str_replace('"' . $field . '"', '', $explanation);
-            $explanation = str_replace($field . ':', '', $explanation);
-        }
-        
-        // Clean up commas, brackets, quotes
-        $explanation = str_replace(array('{', '}', '[', ']', '"', ',', ':', '  '), ' ', $explanation);
-        
-        // Extract only complete sentences
         $sentences = preg_split('/(?<=[.!?])\s+/', $explanation);
         $valid_sentences = array();
         
         foreach ($sentences as $sentence) {
             $sentence = trim($sentence);
-            // Keep sentences that are at least 20 chars and don't look like JSON
-            if (strlen($sentence) >= 20 && 
-                !preg_match('/^[0-9.]+$/', $sentence) &&
-                str_word_count($sentence) >= 5) {
+            if (strlen($sentence) >= 20 && str_word_count($sentence) >= 5) {
                 $valid_sentences[] = $sentence;
             }
         }
         
-        $explanation = implode(' ', $valid_sentences);
-        $explanation = trim($explanation);
+        $explanation = implode(' ', array_slice($valid_sentences, 0, 10));
         
-        if (empty($explanation) || strlen($explanation) < 50) {
-            $explanation = 'Unable to provide detailed analysis. The claim verification was attempted but the response format was invalid.';
+        if (empty($explanation)) {
+            $explanation = 'Unable to provide detailed analysis due to response format issues.';
         }
         
         return array(
             'rating' => $rating,
             'explanation' => $explanation,
             'sources' => array(),
-            'evidence_for' => array(),
-            'evidence_against' => array(),
-            'red_flags' => array(),
-            'confidence' => 0.5
+            'confidence' => 0.4
         );
     }
     
     /**
-     * Search with Tavily (UTF-8 cleaned)
+     * Search web with Tavily
      */
-    public static function search_web_tavily($query) {
+    private static function search_web_tavily($query) {
         $api_key = get_option('ai_verify_tavily_key');
-        
         if (empty($api_key)) {
             return array();
         }
         
-        error_log('AI Verify: Searching with Tavily: ' . $query);
+        error_log('AI Verify: Searching with Tavily: ' . substr($query, 0, 100));
         
         $response = wp_remote_post('https://api.tavily.com/search', array(
-            'headers' => array('Content-Type' => 'application/json'),
-            'body' => self::safe_json_encode(array(
+            'headers' => array(
+                'Content-Type' => 'application/json'
+            ),
+            'body' => json_encode(array(
                 'api_key' => $api_key,
                 'query' => $query,
                 'search_depth' => 'advanced',
-                'include_answer' => true,
-                'include_raw_content' => false,
-                'max_results' => 5
+                'max_results' => 5,
+                'include_answer' => false,
+                'include_raw_content' => false
             )),
             'timeout' => 30
         ));
         
         if (is_wp_error($response)) {
-            return array();
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        
-        if (!isset($body['results'])) {
-            return array();
-        }
-        
-        $results = array();
-        foreach ($body['results'] as $result) {
-            $results[] = array(
-                'title' => self::clean_utf8_recursive($result['title'] ?? ''),
-                'url' => $result['url'] ?? '',
-                'content' => self::clean_utf8_recursive($result['content'] ?? '')
-            );
-        }
-        
-        error_log('AI Verify: Found ' . count($results) . ' Tavily results');
-        return $results;
-    }
-
-    /**
-     * Search with Firecrawl (fallback)
-     */
-    public static function search_web_firecrawl($query) {
-        $api_key = get_option('ai_verify_firecrawl_key');
-        
-        if (empty($api_key)) {
-            return array();
-        }
-        
-        $response = wp_remote_post('https://api.firecrawl.dev/v1/search', array(
-            'headers' => array(
-                'Content-Type' => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key
-            ),
-            'body' => self::safe_json_encode(array(
-                'query' => $query,
-                'limit' => 5,
-                'lang' => 'en',
-                'format' => 'markdown'
-            )),
-            'timeout' => 60
-        ));
-        
-        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            error_log('AI Verify: Tavily search failed: ' . $response->get_error_message());
             return array();
         }
         
         $data = json_decode(wp_remote_retrieve_body($response), true);
-        
-        if (!isset($data['data'])) {
-            return array();
-        }
-        
         $results = array();
-        foreach ($data['data'] as $item) {
-            $results[] = array(
-                'title' => self::clean_utf8_recursive($item['title'] ?? ''),
-                'url' => $item['url'] ?? '',
-                'content' => self::clean_utf8_recursive($item['markdown'] ?? ($item['content'] ?? ''))
-            );
+        
+        if (!empty($data['results'])) {
+            error_log('AI Verify: Found ' . count($data['results']) . ' Tavily results');
+            foreach ($data['results'] as $result) {
+                $results[] = array(
+                    'title' => $result['title'] ?? '',
+                    'url' => $result['url'] ?? '',
+                    'content' => substr($result['content'] ?? '', 0, 1000)
+                );
+            }
         }
         
         return $results;
     }
-
+    
+    /**
+     * Search web with Firecrawl (fallback)
+     */
+    private static function search_web_firecrawl($query) {
+        // Placeholder - implement if needed
+        return array();
+    }
+    
     /**
      * Check Google Fact Check API
      */
-    public static function check_google_factcheck($claim, $api_key) {
-        $keywords = self::extract_keywords($claim);
-        $query = implode(' ', array_slice($keywords, 0, 5));
-        
-        $url = add_query_arg(array(
-            'key' => $api_key,
-            'query' => urlencode($query),
-            'languageCode' => 'en'
-        ), 'https://factchecktools.googleapis.com/v1alpha1/claims:search');
-        
-        $response = wp_remote_get($url, array('timeout' => 15));
+    private static function check_google_factcheck($claim, $api_key) {
+        $response = wp_remote_get(
+            add_query_arg(
+                array('query' => urlencode($claim), 'key' => $api_key),
+                'https://factchecktools.googleapis.com/v1alpha1/claims:search'
+            ),
+            array('timeout' => 15)
+        );
         
         if (is_wp_error($response)) {
             return null;
@@ -873,20 +773,5 @@ Article: {$content}";
         if (preg_match('/\d+/', $sentence)) return 'statistical';
         if (preg_match('/"[^"]*"/', $sentence)) return 'quote';
         return 'general';
-    }
-    
-    private static function extract_keywords($text) {
-        $stop_words = array('the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were');
-        $words = preg_split('/\s+/', strtolower($text));
-        $keywords = array();
-        
-        foreach ($words as $word) {
-            $word = preg_replace('/[^a-z0-9]/', '', $word);
-            if (strlen($word) > 3 && !in_array($word, $stop_words)) {
-                $keywords[] = $word;
-            }
-        }
-        
-        return array_unique($keywords);
     }
 }
