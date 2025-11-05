@@ -599,5 +599,316 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
     </article>
 </div>
 
+<!-- ============================================= -->
+<!-- START: NEW CONTENT BLOCKS (Platform & Signup) -->
+<!-- ============================================= -->
+
+<!-- Styles for the new blocks -->
+<style>
+  .bottom-modules-wrapper {
+    display: grid;
+    /* Creates the 2-column layout on desktop */
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin: 40px auto;
+    /* Re-uses the max-width from your report for consistency */
+    max-width: 1200px; 
+    padding: 0 20px; /* Matches .factcheck-results-wrapper padding */
+  }
+
+  /* Stacks the 2 columns into 1 on mobile */
+  @media (max-width: 900px) {
+    .bottom-modules-wrapper {
+      grid-template-columns: 1fr;
+      padding: 0; /* Full width on mobile */
+    }
+  }
+
+  /* We re-use your existing .report-section class for the containers */
+  .bottom-modules-wrapper .report-section {
+    margin-bottom: 0; 
+  }
+
+  /* We re-use your .breakdown-item styles */
+  .bottom-modules-wrapper .breakdown-value {
+    /* Custom font size for this module's title */
+    font-size: 18px; 
+  }
+
+  .bottom-modules-wrapper .breakdown-label {
+    /* Custom margin for the description text */
+    margin-top: 6px; 
+    /* Overriding default uppercase for a friendlier description */
+    text-transform: none; 
+    letter-spacing: normal;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* We re-use your .form-group and .submit-btn styles from factcheck.css */
+  .bottom-modules-wrapper .signup-form .form-group {
+    margin-bottom: 20px;
+  }
+  
+  .bottom-modules-wrapper .signup-form label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #374151;
+    font-size: 14px;
+  }
+  
+  .bottom-modules-wrapper .signup-form input[type="email"],
+  .bottom-modules-wrapper .signup-form input[type="text"] {
+    width: 100%;
+    padding: 14px 18px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 16px;
+    background: white;
+    transition: all 0.2s ease;
+  }
+
+  .bottom-modules-wrapper .signup-form input:focus {
+    outline: none;
+    border-color: #acd2bf;
+    box-shadow: 0 0 0 3px rgba(172, 210, 191, 0.1);
+  }
+  
+  .bottom-modules-wrapper .signup-form .submit-btn {
+    width: 100%;
+    padding: 16px 0;
+    background: linear-gradient(135deg, #acd2bf 0%, #8fc4a8 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .bottom-modules-wrapper .signup-form .submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(172, 210, 191, 0.4);
+  }
+</style>
+
+<!-- HTML for the new blocks -->
+<div class="bottom-modules-wrapper">
+    
+    <!-- Block 1: Our Intelligence Platform -->
+    <div class="report-section">
+      <h3 class="section-title">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        Our Intelligence Platform (IDIP)
+      </h3>
+      <p class="analyzed-content" style="margin-bottom: 24px;">
+        This fact-check is one part of our Integrated Disinformation Intelligence Platform, designed to monitor, analyze, and counter threats.
+      </p>
+      
+      <div class="score-breakdown" style="grid-template-columns: 1fr; gap: 20px;">
+        
+        <div class="breakdown-item">
+          <div class="breakdown-icon">
+            <!-- X Monitor Icon -->
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1.5-1.5M17 17l.75 3 1.5-1.5M10 14l-1.5 6m5.5-6l1.5 6M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+          </div>
+          <div class="breakdown-content">
+            <div class="breakdown-value">X Monitor</div>
+            <div class="breakdown-label">Monitor social media disinformation in real-time.</div>
+          </div>
+        </div>
+        
+        <div class="breakdown-item">
+          <div class="breakdown-icon">
+            <!-- News Fact Checker Icon -->
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          </div>
+          <div class="breakdown-content">
+            <div class="breakdown-value">News Fact Checker</div>
+            <div class="breakdown-label">Verify news articles and fact-check claims.</div>
+          </div>
+        </div>
+        
+        <div class="breakdown-item">
+          <div class="breakdown-icon">
+            <!-- OSINT Search Icon -->
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </div>
+          <div class="breakdown-content">
+            <div class="breakdown-value">OSINT Search</div>
+            <div class="breakdown-label">Open source intelligence gathering tools.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Block 2: Sign Up for Alerts -->
+    <div class="report-section">
+      <h3 class="section-title">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+        Get Misinformation Alerts
+      </h3>
+      <p class="analyzed-content" style="margin-bottom: 24px;">
+        Stay ahead of false narratives. Sign up for our weekly intelligence briefing on emerging disinformation threats, delivered straight to your inbox.
+      </p>
+      
+      <form class="signup-form">
+        <div class="form-group">
+          <label for="signup_name">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>
+            Your Name
+          </label>
+          <input type="text" id="signup_name" placeholder="John Doe">
+        </div>
+
+        <div class="form-group">
+          <label for="signup_email">
+             <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M2.003 5.884L10 10.884l7.997-5H2.003zM0 5v10a2 2 0 002 2h16a2 2 0 002-2V5a2 2 0 00-2-2H2a2 2 0 00-2 2z"></path></svg>
+            Your Email
+          </label>
+          <input type="email" id="signup_email" placeholder="example@email.com">
+        </div>
+
+        <button type="submit" class="submit-btn">
+          Subscribe Now
+        </button>
+      </form>
+    </div>
+    
+</div>
+<!-- ============================================= -->
+<!-- END: NEW CONTENT BLOCKS -->
+<!-- ============================================= -->
+
+
+<?php
+// --- START: ADD GOOGLE FACT-CHECK SCHEMA ---
+
+// 1. Prepare key variables from your report data
+$schema_metadata = $report_data['metadata'] ?? array();
+$original_article_url = $report_data['input_value'] ?? get_permalink();
+$original_article_title = $schema_metadata['title'] ?? get_the_title();
+$original_article_author = $schema_metadata['author'] ?? 'Unknown';
+
+// Ensure the date is valid and not 'none' before formatting
+$original_article_date = '';
+if (!empty($schema_metadata['date']) && $schema_metadata['date'] !== 'none') {
+    $original_article_date = date('Y-m-d', strtotime($schema_metadata['date']));
+}
+
+$overall_score = $report_data['overall_score'] ?? 0;
+$overall_rating_text = $report_data['credibility_rating'] ?? 'Unverified';
+
+// Convert your 0-100 score to Google's required 1-5 rating scale
+$overall_rating_value = round(($overall_score / 20), 1);
+if ($overall_rating_value < 1) { $overall_rating_value = 1; }
+if ($overall_rating_value > 5) { $overall_rating_value = 5; }
+
+$site_name = get_bloginfo('name');
+$site_url = home_url();
+$site_logo = get_site_icon_url(512); // Get site icon for schema
+
+// 2. Build array of all individual claim reviews
+$schema_claims = array();
+if (!empty($report_data['factcheck_results']) && is_array($report_data['factcheck_results'])) {
+    foreach ($report_data['factcheck_results'] as $claim) {
+        
+        $rating_text = $claim['rating'] ?? 'Unverified';
+        $rating_value = 3; // Default for "Mixed", "Unverified"
+        $rating_lower = strtolower($rating_text);
+
+        if (strpos($rating_lower, 'true') !== false && strpos($rating_lower, 'false') === false) {
+            $rating_text = 'True';
+            $rating_value = 5;
+        } elseif (strpos($rating_lower, 'false') !== false) {
+            $rating_text = 'False';
+            $rating_value = 1;
+        } elseif (strpos($rating_lower, 'misleading') !== false) {
+            $rating_text = 'Misleading';
+            $rating_value = 2; // "Misleading" is between Mixed and False
+        }
+
+        $schema_claims[] = array(
+            '@type'         => 'Claim',
+            // The article where the claim appeared
+            'appearance'    => array(
+                '@type'     => 'ClaimAppearance',
+                'url'       => $original_article_url,
+                'headline'  => $original_article_title,
+                'author'    => $original_article_author,
+                'datePublished' => $original_article_date
+            ),
+            'claimReviewed' => $claim['claim'] ?? '',
+            // Your review of that specific claim
+            'review'        => array(
+                '@type'         => 'ClaimReview',
+                'author'        => array(
+                    '@type' => 'Organization',
+                    'name'  => $site_name,
+                    'url'   => $site_url
+                ),
+                'reviewRating'  => array(
+                    '@type'         => 'Rating',
+                    'ratingValue'   => $rating_value,
+                    'bestRating'    => 5,
+                    'worstRating'   => 1,
+                    'alternateName' => $rating_text
+                ),
+                'claimReviewed' => $claim['claim'] ?? '',
+                'reviewBody'    => $claim['explanation'] ?? ''
+            )
+        );
+    }
+}
+
+// 3. Build the final JSON-LD schema for the whole page
+$json_ld_schema = array(
+    '@context'  => 'https://schema.org',
+    '@type'     => 'FactCheck',
+    'url'       => get_permalink(), // The URL of *this* fact-check report
+    'datePublished' => get_the_date('c'), // The publish date of *this* fact-check report
+    // The author of *this* fact-check report (your organization)
+    'author'    => array(
+        '@type' => 'Organization',
+        'name'  => $site_name,
+        'url'   => $site_url,
+        'logo'  => array(
+            '@type' => 'ImageObject',
+            'url' => $site_logo
+        )
+    ),
+    'claimReviewed' => $original_article_title, // The main claim (e.g., the article's title)
+    // The item being reviewed (the original article)
+    'itemReviewed'  => array(
+        '@type' => 'CreativeWork',
+        'url'   => $original_article_url,
+        'author' => array(
+            '@type' => 'Organization', // Can also be 'Person'
+            'name'  => $original_article_author
+        ),
+        'datePublished' => $original_article_date
+    ),
+    // The overall rating for the *entire* original article
+    'reviewRating' => array(
+        '@type'         => 'Rating',
+        'ratingValue'   => $overall_rating_value,
+        'bestRating'    => 5,
+        'worstRating'   => 1,
+        'alternateName' => $overall_rating_text
+    ),
+    'relatedClaim'  => $schema_claims // Embed all the individual claims you reviewed
+);
+
+// 4. Print the schema in a script tag
+if (!empty($schema_claims)) {
+    echo '<script type="application/ld+json">' . json_encode($json_ld_schema, JSON_UNESCAPED_SLASHES) . '</script>';
+}
+// --- END: ADD GOOGLE FACT-CHECK SCHEMA ---
+?>
 <?php
 get_footer();
