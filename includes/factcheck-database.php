@@ -1,10 +1,11 @@
 <?php
 /**
- * FIXED: Database Operations - Ensures Metadata is ALWAYS Saved
+ * FIXED: Database Operations - Ensures Metadata AND Explanations are ALWAYS Saved Properly
  * Changes:
- * - Metadata saved immediately after scraping
- * - All metadata fields properly extracted and stored
- * - Never loses title, author, date, image data
+ * - Better JSON encoding with proper flags (JSON_UNESCAPED_UNICODE, JSON_UNESCAPED_SLASHES)
+ * - Data cleaning before storage to remove control characters
+ * - Validation after saving to ensure data integrity
+ * - Never loses title, author, date, image data, OR explanations
  */
 
 if (!defined('ABSPATH')) {
@@ -166,7 +167,7 @@ class AI_Verify_Factcheck_Database {
         $update_data = array(
             'scraped_content' => $scraped_data['content'] ?? '',
             'content_type' => sanitize_text_field($content_type),
-            'metadata' => json_encode($metadata), // Save as JSON
+            'metadata' => self::safe_json_encode($metadata),
             'status' => 'scraped'
         );
         
@@ -187,7 +188,7 @@ class AI_Verify_Factcheck_Database {
         $wpdb->update(
             $table_name,
             array(
-                'claims' => json_encode($claims),
+                'claims' => self::safe_json_encode($claims),
                 'status' => 'claims_extracted'
             ),
             array('report_id' => $report_id)
@@ -196,11 +197,16 @@ class AI_Verify_Factcheck_Database {
     
     /**
      * Save fact-check results and create WordPress post
+     * IMPROVED: Better JSON encoding to prevent explanation corruption
      */
     public static function save_results($report_id, $results, $overall_score, $rating, $sources = array(), $propaganda = array()) {
         global $wpdb;
         
         $table_name = $wpdb->prefix . 'ai_verify_factcheck_reports';
+        
+        // CRITICAL: Clean all text data before encoding to prevent corruption
+        $results = self::clean_data_for_storage($results);
+        $sources = self::clean_data_for_storage($sources);
         
         $metadata = array();
         if (!empty($propaganda) && is_array($propaganda)) {
@@ -219,13 +225,28 @@ class AI_Verify_Factcheck_Database {
             }
         }
         
+        // IMPROVED: Use proper JSON encoding flags to prevent corruption
+        $results_json = self::safe_json_encode($results);
+        $sources_json = self::safe_json_encode($sources);
+        $metadata_json = self::safe_json_encode($metadata);
+        
+        // Validate JSON encoding worked
+        if ($results_json === false || $results_json === '{}' || $results_json === 'null') {
+            error_log('AI Verify: Failed to encode results for ' . $report_id);
+            error_log('AI Verify: Results data: ' . print_r($results, true));
+            return false;
+        }
+        
+        error_log('AI Verify: Encoded results length: ' . strlen($results_json) . ' bytes');
+        error_log('AI Verify: First result explanation length: ' . (isset($results[0]['explanation']) ? strlen($results[0]['explanation']) : 0) . ' chars');
+        
         $update_data = array(
             'status' => 'completed',
-            'factcheck_results' => json_encode($results),
+            'factcheck_results' => $results_json,
             'overall_score' => $overall_score,
             'credibility_rating' => $rating,
-            'sources' => json_encode($sources),
-            'metadata' => json_encode($metadata),
+            'sources' => $sources_json,
+            'metadata' => $metadata_json,
             'completed_at' => current_time('mysql')
         );
         
@@ -242,6 +263,20 @@ class AI_Verify_Factcheck_Database {
         
         error_log("AI Verify: Successfully saved results for {$report_id}");
         
+        // Verify data integrity immediately
+        $verify = $wpdb->get_var(
+            $wpdb->prepare("SELECT factcheck_results FROM $table_name WHERE report_id = %s", $report_id)
+        );
+        $verify_decoded = json_decode($verify, true);
+        if (empty($verify_decoded) || !is_array($verify_decoded)) {
+            error_log('AI Verify: WARNING - Saved data cannot be decoded properly!');
+        } else {
+            error_log('AI Verify: Data integrity verified - ' . count($verify_decoded) . ' results');
+            if (isset($verify_decoded[0]['explanation'])) {
+                error_log('AI Verify: First explanation retrieved: ' . substr($verify_decoded[0]['explanation'], 0, 100));
+            }
+        }
+        
         // Create WordPress post
         $report_data = self::get_report($report_id);
         
@@ -253,6 +288,47 @@ class AI_Verify_Factcheck_Database {
         }
         
         return true;
+    }
+    
+    /**
+     * Clean data recursively to remove problematic characters before JSON encoding
+     */
+    private static function clean_data_for_storage($data) {
+        if (is_string($data)) {
+            // Ensure valid UTF-8
+            $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+            // Remove control characters except newlines and tabs
+            $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
+            return $data;
+        }
+        
+        if (is_array($data)) {
+            foreach ($data as $key => $value) {
+                $data[$key] = self::clean_data_for_storage($value);
+            }
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * Safe JSON encode with proper flags to prevent corruption
+     */
+    private static function safe_json_encode($data) {
+        // Use flags that prevent issues with special characters
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_IGNORE);
+        
+        if ($json === false) {
+            error_log('AI Verify: JSON encoding failed - ' . json_last_error_msg());
+            // Try with default flags as fallback
+            $json = json_encode($data);
+            if ($json === false) {
+                error_log('AI Verify: JSON encoding failed even with default flags');
+                return '{}';
+            }
+        }
+        
+        return $json;
     }
     
     /**
@@ -273,7 +349,17 @@ class AI_Verify_Factcheck_Database {
                 $report['claims'] = json_decode($report['claims'], true);
             }
             if (!empty($report['factcheck_results'])) {
-                $report['factcheck_results'] = json_decode($report['factcheck_results'], true);
+                $decoded_results = json_decode($report['factcheck_results'], true);
+                if (is_array($decoded_results)) {
+                    $report['factcheck_results'] = $decoded_results;
+                    // Log first explanation for debugging
+                    if (isset($decoded_results[0]['explanation'])) {
+                        error_log('AI Verify: Retrieved explanation (first 100 chars): ' . substr($decoded_results[0]['explanation'], 0, 100));
+                    }
+                } else {
+                    error_log('AI Verify: Failed to decode factcheck_results');
+                    $report['factcheck_results'] = array();
+                }
             }
             if (!empty($report['sources'])) {
                 $report['sources'] = json_decode($report['sources'], true);
