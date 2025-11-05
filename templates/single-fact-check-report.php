@@ -99,6 +99,8 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
                 </div>
                 
                 <script>
+                // Inject report data for any JavaScript that needs it
+                window.aiVerifyReportData = <?php echo json_encode($report_data); ?>;
                 function toggleShareMenu(e) {
                     e.preventDefault();
                     const menu = document.querySelector('.share-menu');
@@ -590,11 +592,6 @@ if (isset($_GET['processing']) && $_GET['processing'] == '1' && !empty($report_d
         
     </article>
 </div>
-
-<script>
-// Inject report data for any JavaScript that needs it
-window.aiVerifyReportData = <?php echo json_encode($report_data); ?>;
-</script>
 
 <?php
 get_footer();
