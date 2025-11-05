@@ -165,6 +165,7 @@ class AI_Verify_Settings {
                             <select name="ai_verify_factcheck_provider" id="ai_verify_factcheck_provider">
                                 <option value="perplexity" <?php selected($factcheck_provider, 'perplexity'); ?>>✨ Perplexity (Multi-Step)</option>
                                 <option value="openrouter" <?php selected($factcheck_provider, 'openrouter'); ?>>OpenRouter (Multi-Step)</option>
+                                <option value="openrouter_websearch" <?php selected($factcheck_provider, 'openrouter_websearch'); ?>>🌐 OpenRouter Web Search (Multi-Step - NEW!)</option>
                                 
                                 <option value="single_call_perplexity" <?php selected($factcheck_provider, 'single_call_perplexity'); ?>>🚀 Single Call Perplexity (Faster)</option>
                                 <option value="single_call_openrouter" <?php selected($factcheck_provider, 'single_call_openrouter'); ?>>🚀 Single Call OpenRouter (Faster)</option>
@@ -172,6 +173,7 @@ class AI_Verify_Settings {
                             <p class="description">
                                 <strong>💡 Multi-Step:</strong> More detailed but slower. Extracts individual claims then verifies each one separately.<br>
                                 <strong>🚀 Single Call:</strong> Faster & cheaper. The AI analyzes the entire article in one request to generate the full report.
+                                <strong>🌐 OpenRouter Web Search:</strong> NEW! Uses OpenRouter's native search - potentially faster, no Tavily needed<br>
                             </p>
                         </td>
                     </tr>

@@ -395,6 +395,52 @@ class AI_Verify_Factcheck_Ajax {
                 AI_Verify_Factcheck_Database::update_progress($report_id, 90, 'Extracting article metadata...');
                 AI_Verify_Factcheck_Database::extract_and_save_metadata($report_id);
 
+
+            } elseif ($provider === 'openrouter_websearch') {
+                // NEW: OpenRouter Native Web Search workflow
+                error_log("AI Verify: Using OpenRouter Native Web Search workflow");
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 20, 'Initializing web search analysis...');
+                
+                // Use the new OpenRouter Web Search analyzer
+                $result_data = AI_Verify_Factcheck_OpenRouter_WebSearch::analyze_with_websearch($content, $context, $report['input_value']);
+                
+                if (is_wp_error($result_data)) {
+                    throw new Exception($result_data->get_error_message());
+                }
+                
+                if (empty($result_data) || !isset($result_data['factcheck_results'])) {
+                    throw new Exception('OpenRouter Web Search failed to generate a valid report.');
+                }
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 80, 'Processing analysis results...');
+                
+                $factcheck_results = $result_data['factcheck_results'];
+                $overall_score = $result_data['overall_score'] ?? 50;
+                $credibility_rating = $result_data['credibility_rating'] ?? 'Mixed Credibility';
+                $propaganda = $result_data['propaganda_techniques'] ?? array();
+                
+                $sources = array();
+                foreach ($factcheck_results as $result) {
+                    if (!empty($result['sources'])) {
+                        $sources = array_merge($sources, $result['sources']);
+                    }
+                }
+                $unique_sources = array_values(array_unique($sources, SORT_REGULAR));
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 85, 'Finalizing report...');
+                
+                AI_Verify_Factcheck_Database::save_results(
+                    $report_id,
+                    $factcheck_results,
+                    $overall_score,
+                    $credibility_rating,
+                    $unique_sources,
+                    $propaganda
+                );
+                
+                AI_Verify_Factcheck_Database::update_progress($report_id, 90, 'Extracting article metadata...');
+                AI_Verify_Factcheck_Database::extract_and_save_metadata($report_id);
             } else {
                 // Multi-step workflow with progress tracking
                 error_log("AI Verify: Using Multi-Step workflow with provider: $provider");
